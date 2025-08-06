@@ -68,10 +68,11 @@ export default function WordLearnScreen({ navigation, route }) {
               <View style={styles.difficultyContainer}>
                 <Text style={styles.difficultyLabel}>Zorluk Seviyesi</Text>
                 <View style={[styles.difficultyBadge, { backgroundColor: wordSet.color }]}>
-                  <Text style={styles.difficultyText}>
-                    {wordSet.category === 'temel' ? 'Kolay' : 
-                     wordSet.category === 'sinav' ? 'Orta' : 'Zor'}
-                  </Text>
+                                  <Text style={styles.difficultyText}>
+                  {wordSet.difficulty === 'A1' ? 'Kolay' : 
+                   wordSet.difficulty === 'B1' ? 'Orta' : 
+                   wordSet.difficulty === 'C1' ? 'Zor' : 'Kolay'}
+                </Text>
                 </View>
               </View>
 

@@ -32,11 +32,11 @@ export default function WordCard({
           </View>
         </View>
         <View style={styles.wordContainer}>
-          <OutlinedText style={styles.word}>{word.kelime}</OutlinedText>
+          <OutlinedText style={styles.word}>{word.word_text}</OutlinedText>
         </View>
-        <Text style={styles.meaning}>{word.anlam}</Text>
+        <Text style={styles.meaning}>{word.word_meaning}</Text>
         <View style={styles.exampleContainer}>
-          <Text style={styles.example}>{word.ornekCumle}</Text>
+          <Text style={styles.example}>{word.example_sentence}</Text>
         </View>
         {/* Alt ikon barı */}
         <View style={styles.iconBar}>
@@ -98,50 +98,36 @@ const styles = StyleSheet.create({
   },
   word: { 
     color: "white", 
-    fontSize: 42, 
-    fontWeight: "bold", 
+    fontSize: 48, 
+    fontWeight: "bold",
     textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.9)',
-    textShadowOffset: { width: 3, height: 3 },
-    textShadowRadius: 6,
   },
-  meaning: { 
-    color: "white", 
-    fontSize: 24, 
+  meaning: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: '600',
     marginBottom: 32,
     textAlign: 'center',
-    fontWeight: '500',
-    opacity: 0.95,
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
   },
   exampleContainer: {
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 16,
-    padding: 16,
-    marginBottom:32,
-    marginTop: 8,
+    padding: 20,
+    marginBottom: 32,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
   },
-  example: { 
-    color: "white", 
-    fontSize: 16, 
-    fontStyle: "italic", 
-    opacity: 0.85,
+  example: {
+    color: 'white',
+    fontSize: 16,
+    lineHeight: 24,
     textAlign: 'center',
-    lineHeight: 22,
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
+    fontStyle: 'italic',
   },
   iconBar: {
     flexDirection: 'row',
-    justifyContent: 'space-evenly',
-    alignItems: 'center',
+    justifyContent: 'space-around',
     width: '100%',
-    marginTop: 32,
-    marginBottom: 8,
+    marginTop: 'auto',
   },
 });

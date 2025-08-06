@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
-import { View, StyleSheet, Animated, Dimensions } from "react-native";
+import { View, StyleSheet, Animated, Dimensions, Text } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as SystemUI from 'expo-system-ui';
 import { State } from "react-native-gesture-handler";
-import wordSets from '../data/kelimeSetleri';
+import HybridDatabaseService from '../services/HybridDatabaseService';
 import { useTheme } from '../contexts/ThemeContext';
 import Background from '../components/shared/Background';
 import WordCard from '../components/HomeScreen/WordCard';
@@ -14,6 +14,102 @@ const { height, width } = Dimensions.get('window');
 
 export default function HomeScreen({ navigation }) {
   const { currentTheme, themeColors, changeTheme } = useTheme();
+  const [wordSets, setWordSets] = useState([]);
+  const [shuffledWords, setShuffledWords] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [themeModalVisible, setThemeModalVisible] = useState(false);
+
+  // Fetch words from Supabase
+  useEffect(() => {
+    const fetchWords = async () => {
+      try {
+        setLoading(true);
+        const data = await HybridDatabaseService.getAllWords();
+        console.log('Fetched words:', data);
+        
+        if (data && data.length > 0) {
+          // Gerçek verileri kullan
+          const wordsWithMeta = data.map(word => ({
+            word_text: word.word_text,
+            word_meaning: word.meaning,
+            example_sentence: word.example_sentence,
+            setInfo: {
+              icon: '📚',
+              title: 'Kelime Seti',
+              difficulty: 'Kolay',
+              gradient: ['#10B981', '#3B82F6'],
+            }
+          }));
+          
+          const shuffled = shuffleArray(wordsWithMeta);
+          setShuffledWords(shuffled);
+        } else {
+          // Eğer veri yoksa mock data kullan
+          const mockWords = [
+            {
+              word_text: 'hello',
+              word_meaning: 'merhaba',
+              example_sentence: 'Hello, how are you?',
+              setInfo: {
+                icon: '👋',
+                title: 'Temel Kelimeler',
+                difficulty: 'Kolay',
+                gradient: ['#10B981', '#3B82F6'],
+              }
+            },
+            {
+              word_text: 'world',
+              word_meaning: 'dünya',
+              example_sentence: 'The world is beautiful.',
+              setInfo: {
+                icon: '🌍',
+                title: 'Temel Kelimeler',
+                difficulty: 'Kolay',
+                gradient: ['#10B981', '#3B82F6'],
+              }
+            },
+            {
+              word_text: 'learn',
+              word_meaning: 'öğrenmek',
+              example_sentence: 'I want to learn English.',
+              setInfo: {
+                icon: '📚',
+                title: 'Temel Kelimeler',
+                difficulty: 'Kolay',
+                gradient: ['#10B981', '#3B82F6'],
+              }
+            }
+          ];
+          
+          const shuffled = shuffleArray(mockWords);
+          setShuffledWords(shuffled);
+        }
+      } catch (error) {
+        console.error('Error fetching words:', error);
+        // Hata durumunda mock data kullan
+        const mockWords = [
+          {
+            word_text: 'hello',
+            word_meaning: 'merhaba',
+            example_sentence: 'Hello, how are you?',
+            setInfo: {
+              icon: '👋',
+              title: 'Temel Kelimeler',
+              difficulty: 'Kolay',
+              gradient: ['#10B981', '#3B82F6'],
+            }
+          }
+        ];
+        setShuffledWords(mockWords);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchWords();
+  }, []);
 
   // 1. Kelimeleri karıştır
   function shuffleArray(array) {
@@ -25,25 +121,17 @@ export default function HomeScreen({ navigation }) {
     return arr;
   }
 
-  const allWords = wordSets.flatMap(set => set.kelimeler);
-  const [shuffledWords] = useState(() => shuffleArray(allWords));
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(false);
   const displayedWord = shuffledWords[currentIndex];
 
   // 2. Kart meta bilgisi
   function getWordMeta(word) {
-    for (const set of wordSets) {
-      if (set.kelimeler.some(k => k.kelime === word.kelime)) {
-        return {
-          icon: set.icon,
-          title: set.baslik,
-          difficulty: set.zorluk,
-          gradient: set.gradient,
-        };
-      }
-    }
-    return {};
+    if (!word || !word.setInfo) return {};
+    return {
+      icon: word.setInfo.icon,
+      title: word.setInfo.title,
+      difficulty: word.setInfo.difficulty,
+      gradient: word.setInfo.gradient,
+    };
   }
   const meta = getWordMeta(displayedWord);
 
@@ -129,33 +217,57 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  // Navigation bar rengi güncelleme
+  // 4. Sistem UI'ı ayarla
   useEffect(() => {
-    SystemUI.setBackgroundColorAsync(themeColors[1]);
-  }, [themeColors]);
+    SystemUI.setBackgroundColorAsync(themeColors.background);
+  }, [themeColors.background]);
 
-  // Menü açma/kapama için state
-  const [menuVisible, setMenuVisible] = useState(false);
+  const handleThemeChange = (newTheme) => {
+    changeTheme(newTheme);
+    setThemeModalVisible(false);
+  };
 
-  // 5. UI
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+        <Background colors={themeColors}>
+          <SafeAreaView style={styles.safeArea}>
+            <View style={styles.loadingContainer}>
+              <Text style={[styles.loadingText, { color: themeColors.text }]}>
+                Kelimeler yükleniyor...
+              </Text>
+            </View>
+          </SafeAreaView>
+        </Background>
+      </View>
+    );
+  }
+
+  if (!displayedWord) {
+    return (
+      <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+        <Background colors={themeColors}>
+          <SafeAreaView style={styles.safeArea}>
+            <View style={styles.emptyContainer}>
+              <Text style={[styles.emptyText, { color: themeColors.text }]}>
+                Henüz kelime seti bulunmuyor.
+              </Text>
+            </View>
+          </SafeAreaView>
+        </Background>
+      </View>
+    );
+  }
+
   return (
-    <View style={{ flex: 1 }}>
+    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
       <Background colors={themeColors}>
         <SafeAreaView style={styles.safeArea}>
           {/* Sağ üst köşede tema butonu */}
-          <View style={{ position: 'absolute', top: 0, right: 0, zIndex: 10, padding: 16 }}>
-            <ThemeButton onPress={() => setMenuVisible(true)} />
+          <View style={styles.themeButtonContainer}>
+            <ThemeButton onPress={() => setThemeModalVisible(true)} />
           </View>
-          {/* Tema Modal */}
-          <ThemeModal
-            visible={menuVisible}
-            onClose={() => setMenuVisible(false)}
-            currentTheme={currentTheme}
-            onThemeChange={(theme) => {
-              changeTheme(theme);
-              setMenuVisible(false);
-            }}
-          />
+
           {/* Ana içerik - kart */}
           <View style={styles.centerContent}>
             <WordCard
@@ -168,6 +280,14 @@ export default function HomeScreen({ navigation }) {
               isAnimating={isAnimating}
             />
           </View>
+
+          {/* Tema Modal */}
+          <ThemeModal 
+            visible={themeModalVisible}
+            onClose={() => setThemeModalVisible(false)}
+            currentTheme={currentTheme}
+            onThemeChange={handleThemeChange}
+          />
         </SafeAreaView>
       </Background>
     </View>
@@ -175,6 +295,9 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   safeArea: {
     flex: 1,
     justifyContent: 'center',
@@ -188,5 +311,30 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: 'transparent',
     paddingHorizontal: 20,
+  },
+  themeButtonContainer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    zIndex: 10,
+    padding: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 20,
+    fontWeight: 'bold',
   },
 });

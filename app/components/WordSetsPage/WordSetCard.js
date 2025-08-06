@@ -1,28 +1,75 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import LocalDatabaseService from '../../services/LocalDatabaseService';
 
-export default function WordSetCard({ wordSet, categories, onPress }) {
+export default function WordSetCard({ wordSet, onPress }) {
+  const [wordCount, setWordCount] = useState(0);
+
+  useEffect(() => {
+    const fetchWordCount = async () => {
+      if (wordSet.isCategory && wordSet.id) {
+        // Bu bir kategori card'ı ise, kategori ID'siyle kelime sayısı getir
+        try {
+          const count = await LocalDatabaseService.getWordsCountByCategoryId(wordSet.id);
+          setWordCount(count);
+          console.log(`✅ Kategori ${wordSet.id} için ${count} kelime bulundu`);
+        } catch (error) {
+          console.error('❌ Kategori kelime sayısı getirme hatası:', error);
+          setWordCount(0);
+        }
+      } else if (wordSet.total !== undefined) {
+        // Normal word set ise, zaten hesaplanmış total'ı kullan
+        setWordCount(wordSet.total);
+      } else {
+        setWordCount(0);
+      }
+    };
+
+    fetchWordCount();
+  }, [wordSet.isCategory, wordSet.id, wordSet.total]);
+
   const handlePress = () => {
-    console.log('WordSetCard pressed:', wordSet.name);
+    console.log('WordSetCard pressed:', wordSet?.name);
     if (onPress) {
       onPress();
     }
   };
+
+  
+  // wordSet undefined ise boş component döndür
+  if (!wordSet) {
+    return null;
+  }
+
+  const getDifficultyName = (difficulty) => {
+    const names = {
+      'A1': 'Başlangıç',
+      'A2': 'Temel',
+      'B1': 'Orta',
+      'B2': 'Orta-İleri',
+      'C1': 'İleri',
+      'C2': 'Profesyonel'
+    };
+    return names[difficulty] || difficulty || 'Genel';
+  };
+
+  const setName = wordSet.name || 'Kelime Seti';
+  const firstChar = setName.charAt(0) || 'K';
 
   return (
     <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={handlePress}>
       <View style={styles.cardRow}>
         <View style={styles.cardLeft}>
           <View style={[styles.iconBox, { backgroundColor: wordSet.color }]}> 
-            <Text style={styles.iconText}>{wordSet.name.charAt(0)}</Text>
+            <Text style={styles.iconText}>{firstChar}</Text>
           </View>
           <View>
-            <Text style={styles.setName}>{wordSet.name}</Text>
-            <Text style={styles.setTotal}>{wordSet.total} kelime</Text>
+            <Text style={styles.setName}>{setName}</Text>
+            <Text style={styles.setTotal}>{wordCount} kelime</Text>
             {/* Kategori etiketi */}
             <View style={styles.categoryTag}>
               <Text style={styles.categoryText}>
-                {categories.find(cat => cat.id === wordSet.category)?.name || wordSet.category}
+                {getDifficultyName(wordSet.category)}
               </Text>
             </View>
           </View>
@@ -31,10 +78,10 @@ export default function WordSetCard({ wordSet, categories, onPress }) {
           <View style={{ alignItems: 'flex-end' }}>
             <View style={styles.progressRow}>
               <Text style={styles.starEmoji}>⭐</Text>
-              <Text style={styles.progressText}>{wordSet.progress}%</Text>
+              <Text style={styles.progressText}>{wordSet.progress || 0}%</Text>
             </View>
             <View style={styles.progressBarBg}>
-              <View style={[styles.progressBarFill, { backgroundColor: wordSet.color, width: `${wordSet.progress}%` }]} />
+              <View style={[styles.progressBarFill, { backgroundColor: wordSet.color, width: `${wordSet.progress || 0}%` }]} />
             </View>
           </View>
           <Text style={styles.chevronEmoji}>❯</Text>
