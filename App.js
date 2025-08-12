@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider } from './app/contexts/ThemeContext';
 import { AuthProvider, useAuth } from './app/contexts/AuthContext';
+import { DataProvider } from './app/contexts/DataContext';
 import TabNavigator from './app/navigation/TabNavigator';
 import AuthNavigator from './app/navigation/AuthNavigator';
 import { View, ActivityIndicator } from 'react-native';
@@ -65,9 +66,11 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <AuthProvider>
-          <NavigationContainer>
-            <NavigationWrapper />
-          </NavigationContainer>
+          <DataProvider>
+            <NavigationContainer>
+              <NavigationWrapper />
+            </NavigationContainer>
+          </DataProvider>
         </AuthProvider>
       </ThemeProvider>
     </GestureHandlerRootView>

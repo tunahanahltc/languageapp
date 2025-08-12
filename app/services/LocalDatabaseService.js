@@ -327,7 +327,7 @@ class LocalDatabaseService {
       throw error;
     }
   }
-  
+
   // Word translations operations
   async insertWordTranslations(translations) {
     try {
@@ -383,6 +383,22 @@ class LocalDatabaseService {
          WHERE c.set_id = ? AND wt.language_code = ?
          ORDER BY wt.created_at`,
         [setId, 'en']
+      );
+      return result;
+    } catch (error) {
+      console.error('❌ Set kelimelerini getirme hatası:', error);
+      throw error;
+    }
+  }
+  async getWordsByCategoryId(categoryId) {
+    try {
+      const result = await this.db.getAllAsync(
+        `SELECT wt.* FROM word_translations wt
+         INNER JOIN words w ON wt.word_id = w.word_id
+         INNER JOIN categories c ON w.category_id = c.category_id
+         WHERE c.category_id = ? AND wt.language_code = ?
+         ORDER BY wt.created_at`,
+        [categoryId, 'en']
       );
       return result;
     } catch (error) {

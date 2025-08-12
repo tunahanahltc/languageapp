@@ -1,195 +1,201 @@
-import React, { useState, useEffect } from 'react';
-import HybridDatabaseService from '../services/HybridDatabaseService';
-import { View, ScrollView, StyleSheet, Text } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, ScrollView, StyleSheet, Text, FlatList, RefreshControl, SafeAreaView, StatusBar, Animated, Dimensions } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
+import { useData } from '../contexts/DataContext';
 import Background from '../components/shared/Background';
-import WordSetsHeader from '../components/WordSetsPage/WordSetsHeader';
-import CategoryFilter from '../components/WordSetsPage/CategoryFilter';
+import ModernHeader from '../components/WordSetsPage/ModernHeader';
+import SimpleSearchHeader from '../components/WordSetsPage/SimpleSearchHeader';
+import EnhancedCategoryFilter from '../components/WordSetsPage/EnhancedCategoryFilter';
 import WordSetCard from '../components/WordSetsPage/WordSetCard';
-import EmptyState from '../components/WordSetsPage/EmptyState';
+import ModernEmptyState from '../components/WordSetsPage/ModernEmptyState';
+import ModernLoadingState from '../components/WordSetsPage/ModernLoadingState';
 
-// Kategoriler dinamik olarak CategoryFilter'dan gelecek
+const { width, height } = Dimensions.get('window');
 
 export default function WordSetsPage({ navigation }) {
   const { themeColors } = useTheme();
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [wordSets, setWordSets] = useState([]);
-  const [subCategories, setSubCategories] = useState([]); // Alt kategoriler
-  const [loading, setLoading] = useState(true);
+  const { wordSets, allCategories, loading: dataLoading, initialized } = useData();
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedDifficulty, setSelectedDifficulty] = useState(null);
+  const [subCategories, setSubCategories] = useState([]);
   const [showSubCategories, setShowSubCategories] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [scrollY] = useState(new Animated.Value(0));
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
 
   useEffect(() => {
-    const fetchWordSets = async () => {
-      try {
-        setLoading(true);
-        const data = await HybridDatabaseService.getWordSets();
-        
-        // Map the data to match the expected format
-        const mapped = data?.map((set, i) => ({
-          id: set.set_id,
-          name: set.set_name,
-          description: set.description,
-          category: set.difficulty || 'A1', // Use difficulty as category
-          difficulty: set.difficulty || 'A1',
-          icon: set.icon || '📚',
-          gradient: ['#10B981', '#3B82F6'], // Default gradient
-          progress: Math.floor(Math.random() * 90) + 10, // Mock progress for now
-          total: 0, // Will be calculated separately
-          color: set.color || '#3b82f6',
-        })) || [];
-        
-        // Calculate total words for each set
-        const setsWithTotals = await Promise.all(
-          mapped.map(async (set) => {
-            try {
-              const words = await HybridDatabaseService.getWordsBySetId(set.id);
-              return {
-                ...set,
-                total: words.length
-              };
-            } catch (error) {
-              console.error(`Error getting words for set ${set.id}:`, error);
-              return set;
-            }
-          })
-        );
-        
-        setWordSets(setsWithTotals);
-      } catch (error) {
-        console.error('Error fetching word sets:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (initialized && wordSets.length > 0) {
+      console.log('⚡ WordSetsPage: Veriler cache\'den anında yüklendi');
+    }
+  }, [initialized, wordSets]);
 
-    fetchWordSets();
-  }, []);
-
-  // Kategori seçildiğinde çağrılacak
-  const handleCategorySelect = async (categoryId) => {
-    setSelectedCategory(categoryId);
-    
-    if (categoryId === 'all') {
-      // Tümü seçilirse normal word sets'leri göster
-      setShowSubCategories(false);
-      setSubCategories([]);
-    } else {
-      // Specific set seçilirse o setin alt kategorilerini WordSetCard olarak göster
-      try {
-        console.log(`📂 Set ID ${categoryId} için alt kategoriler getiriliyor...`);
-        const categories = await HybridDatabaseService.getCategoriesBySetId(parseInt(categoryId));
+  // İlk seti otomatik seç
+  useEffect(() => {
+    if (!selectedCategory && Array.isArray(wordSets) && wordSets.length > 0) {
+      const firstSetId = (wordSets[0].id ?? wordSets[0].set_id)?.toString();
+      if (firstSetId) {
+        setSelectedCategory(firstSetId);
+        const categories = allCategories[firstSetId] || [];
         setSubCategories(categories);
         setShowSubCategories(categories.length > 0);
-        console.log(`📂 ${categories.length} alt kategori bulundu`);
-      } catch (error) {
-        console.error('❌ Alt kategori getirme hatası:', error);
-        setSubCategories([]);
-        setShowSubCategories(false);
       }
     }
+  }, [wordSets, allCategories, selectedCategory]);
+
+  const getRandomColor = () => {
+    const colors = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+    return colors[Math.floor(Math.random() * colors.length)];
   };
 
-  const getFilteredData = () => {
-    if (selectedCategory === 'all') {
-      // Tümü seçilirse word sets'leri göster
-      return wordSets;
-    } else if (showSubCategories && subCategories.length > 0) {
-      // Bir set seçilmişse ve alt kategoriler varsa, kategorileri card olarak göster
-      return subCategories.map(cat => ({
+  const handleCategorySelect = (categoryId) => {
+    const startTime = performance.now();
+    const categories = allCategories[categoryId] || [];
+    setSelectedCategory(categoryId);
+    setSubCategories(categories);
+    setShowSubCategories(categories.length > 0);
+    const endTime = performance.now();
+    console.log(`⚡ UI OPTİMİZE: ${categories.length} alt kategori ${(endTime - startTime).toFixed(2)}ms'de yüklendi`);
+  };
+
+  const filteredData = useMemo(() => {
+    if (!selectedCategory) return [];
+    if (showSubCategories && subCategories.length > 0) {
+      let filteredSubCategories = subCategories;
+      if (selectedDifficulty) {
+        filteredSubCategories = subCategories.filter(cat => cat.difficulty === selectedDifficulty);
+      }
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        filteredSubCategories = filteredSubCategories.filter(cat =>
+          (cat.category_name || '').toLowerCase().includes(query) ||
+          (cat.description || '').toLowerCase().includes(query)
+        );
+      }
+      return filteredSubCategories.map(cat => ({
         id: cat.category_id,
         name: cat.category_name,
-        description: cat.description || 'Kategori açıklaması',
-        category: 'category', // Bu bir kategori olduğunu belirt
+        description: cat.description || '',
+        category: cat.difficulty || 'A1',
         difficulty: cat.difficulty || 'A1',
         icon: cat.icon || '📚',
         gradient: ['#10B981', '#3B82F6'],
-        progress: 0, // Kategoriler için progress yok
-        total: 0, // Kelime sayısı ayrıca hesaplanabilir
-        color: '#3b82f6',
-        isCategory: true // Bu bir kategori card'ı
+        progress: 0,
+        total: 0,
+        color: getRandomColor(),
+        isCategory: true
       }));
-    } else {
-      // Seçilen set varsa ama alt kategori yoksa, o seti göster
-      return wordSets.filter(set => set.id.toString() === selectedCategory);
     }
+    return [];
+  }, [selectedCategory, showSubCategories, subCategories, selectedDifficulty, searchQuery]);
+
+  const getHeaderInfo = () => {
+    if (selectedCategory && showSubCategories) {
+      const selectedSet = wordSets.find(set =>
+        (set.id?.toString() === selectedCategory) || (set.set_id?.toString() === selectedCategory)
+      );
+      if (selectedSet) {
+        return {
+          title: selectedSet.name || selectedSet.set_name || 'Set',
+          subtitle: `${filteredData.length} hikaye`
+        };
+      }
+    }
+    return { title: 'Kütüphanem', subtitle: `${wordSets.length} set` };
   };
 
-  const filteredData = getFilteredData();
+  const handleAddPress = () => {
+    alert('Yakında: Kendi setinizi oluşturabileceksiniz! 🎯');
+  };
 
-  if (loading) {
+  if (dataLoading || !initialized) {
     return (
       <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         <Background colors={themeColors}>
-          <WordSetsHeader />
-          <View style={styles.loadingContainer}>
-            <Text style={[styles.loadingText, { color: themeColors.text }]}>
-              Kelime setleri yükleniyor...
-            </Text>
-          </View>
+          <ModernLoadingState />
         </Background>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <Background colors={themeColors}>
-        <WordSetsHeader />
-        
-                <CategoryFilter 
-          selectedCategory={selectedCategory}
-          onCategorySelect={handleCategorySelect}
-        />
+        <View style={styles.headerContainer}>
+          <ModernHeader
+            title={getHeaderInfo().title}
+            subtitle={getHeaderInfo().subtitle}
+            onAddPress={handleAddPress}
+            onSearchPress={() => setIsSearchVisible(!isSearchVisible)}
+            showAddButton={true}
+            showSearchButton={true}
+          />
 
+          {isSearchVisible && (
+            <SimpleSearchHeader
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+            />
+          )}
 
+          <EnhancedCategoryFilter 
+            selectedCategory={selectedCategory}
+            onCategorySelect={handleCategorySelect}
+            selectedDifficulty={selectedDifficulty}
+            onDifficultySelect={setSelectedDifficulty}
+            allCategories={allCategories}
+            wordSets={wordSets}
+          />
+        </View>
 
-        <ScrollView style={styles.scrollview} contentContainerStyle={styles.listContainer}>
-          {filteredData.length > 0 ? (
-            filteredData.map((item, index) => (
+        <View style={styles.contentContainer}>
+          <FlatList
+            data={filteredData}
+            renderItem={({ item, index }) => (
               <WordSetCard
-                key={item.id || index}
                 wordSet={item}
+                index={index}
                 onPress={() => {
-                  if (item.isCategory) {
-                    // Kategori card'ına tıklandıysa, o kategorinin kelimelerine git
-                    console.log(`📂 Kategori seçildi: ${item.name} (ID: ${item.id})`);
-                    navigation.navigate('WordLearnScreen', { category: item });
-                  } else {
-                    // Normal set card'ına tıklandıysa
-                    navigation.navigate('WordLearnScreen', { wordSet: item });
-                  }
+                  navigation.navigate('WordLearnScreen', { wordSet: item });
                 }}
               />
-            ))
-          ) : (
-            <EmptyState />
-          )}
-        </ScrollView>
+            )}
+            keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+            numColumns={2}
+            contentContainerStyle={styles.listContainer}
+            columnWrapperStyle={styles.row}
+            showsVerticalScrollIndicator={false}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            initialNumToRender={6}
+            windowSize={10}
+            ListEmptyComponent={<ModernEmptyState />}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={() => {
+                  setIsRefreshing(true);
+                  setTimeout(() => { setIsRefreshing(false); }, 1500);
+                }}
+                tintColor="#fff"
+                title="Yenileniyor..."
+                titleColor="#fff"
+              />
+            }
+          />
+        </View>
       </Background>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  scrollview: {
-    margin: 10,
-    marginBottom: 50
-  },
-  listContainer: {
-    paddingBottom: 80,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-
+  safeArea: { flex: 1, backgroundColor: 'transparent' },
+  headerContainer: { paddingTop: StatusBar.currentHeight || 0, paddingBottom: 8 },
+  contentContainer: { flex: 1, backgroundColor: 'rgba(255,255,255,0.05)', borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
+  scrollview: { flex: 1 },
+  listContainer: { paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', paddingBottom: height * 0.15, paddingTop: 16 },
+  row: { justifyContent: 'space-around', paddingHorizontal: 0 },
 });

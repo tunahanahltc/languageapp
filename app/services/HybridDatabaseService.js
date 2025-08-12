@@ -130,6 +130,26 @@ class HybridDatabaseService {
     return await this.localDB.getCategories();
   }
 
+  // Set ID'ye göre kelime sayısını getir (yerel) - PERFORMANSLI
+  async getWordCountByCategoryId(setId) {
+    if (this.isInitialized) {
+      return await this.localDB.getWordsCountByCategoryId(setId);
+    }
+    
+    await this.checkDatabaseStatus();
+    return await this.localDB.getWordsCountByCategoryId(setId);
+  }
+
+  // Kategori ID'ye göre kelimeleri getir (yerel)
+  async getWordsByCategoryId(categoryId) {
+    if (this.isInitialized) {
+      return await this.localDB.getWordsByCategoryId(categoryId);
+    }
+    
+    await this.checkDatabaseStatus();
+    return await this.localDB.getWordsByCategoryId(categoryId);
+  }
+
   // Set ID'ye göre kategorileri getir (yerel)
   async getCategoriesBySetId(setId) {
     if (this.isInitialized) {
