@@ -119,7 +119,17 @@ class HybridDatabaseService {
     await this.checkDatabaseStatus();
     return await this.localDB.getWordsBySetId(setId);
   }
-
+// app/services/HybridDatabaseService.js  (class içine, saveFavoriteWord yanına ekleyin)
+async removeFavoriteWord(userId, wordId) {
+  try {
+    await this.localDB.deleteUserFavorite(userId, wordId);
+    await this.supabase.removeFromFavorites(userId, wordId);
+    return true;
+  } catch (error) {
+    console.error('Favori kelime silme hatası:', error);
+    throw error;
+  }
+}
   // Tüm kategorileri getir (yerel)
   async getCategories() {
     if (this.isInitialized) {
@@ -389,6 +399,98 @@ class HybridDatabaseService {
     } catch (error) {
       console.error('❌ Debug bilgisi alınamadı:', error);
       return { error: error.message };
+    }
+  }
+
+  // Giriş yapınca tüm kullanıcı verilerini senkronize et
+  async syncUserDataOnLogin(userId) {
+    try {
+      console.log('🔄 Giriş yapıldı, kullanıcı verileri senkronize ediliyor...');
+      
+      // Tüm kullanıcı verilerini Supabase'den çek
+      const [userProfile, favorites, progress] = await Promise.all([
+        this.supabase.getUserById(userId),
+        this.supabase.getUserFavorites(userId),
+        this.supabase.getUserProgress(userId)
+      ]);
+      
+      // Local'e kaydet
+      if (userProfile) {
+        await this.localDB.insertUser(userProfile);
+        console.log('✅ Kullanıcı profili senkronize edildi');
+      }
+      
+      if (favorites && favorites.length > 0) {
+        for (const fav of favorites) {
+          await this.localDB.insertUserFavorite(userId, fav.word_id);
+        }
+        console.log(`✅ ${favorites.length} favori kelime senkronize edildi`);
+      }
+      
+      if (progress && progress.length > 0) {
+        for (const prog of progress) {
+          await this.localDB.insertUserSetData(prog);
+        }
+        console.log(`✅ ${progress.length} ilerleme kaydı senkronize edildi`);
+      }
+      
+      console.log('✅ Tüm kullanıcı verileri senkronize edildi');
+    } catch (error) {
+      console.error('❌ Kullanıcı veri senkronizasyon hatası:', error);
+      throw error;
+    }
+  }
+
+  // Giriş yapınca kelime verilerini kontrol et ve güncelle
+  async checkAndUpdateWordDataOnLogin() {
+    try {
+      console.log('🔄 Kelime verileri kontrol ediliyor...');
+      
+      // Veritabanı versiyonunu kontrol et
+      const currentVersion = await this.localDB.getDatabaseVersion();
+      const lastUpdate = new Date(currentVersion);
+      const now = new Date();
+      const daysSinceUpdate = (now - lastUpdate) / (1000 * 60 * 60 * 24);
+      
+      // 7 günden eskiyse güncelle
+      if (daysSinceUpdate > 7) {
+        console.log('📅 Kelime verileri güncel değil, güncelleniyor...');
+        await this.syncDatabase();
+      } else {
+        console.log('✅ Kelime verileri güncel');
+      }
+    } catch (error) {
+      console.error('❌ Kelime veri kontrol hatası:', error);
+    }
+  }
+
+  // Sadece local'den favori kelimeleri getir (Supabase'e gitme)
+  async getFavoriteWordsLocalOnly(userId) {
+    try {
+      return await this.localDB.getUserFavorites(userId);
+    } catch (error) {
+      console.error('Favori kelimeler getirme hatası:', error);
+      return [];
+    }
+  }
+
+  // Sadece local'den kullanıcı verilerini getir (Supabase'e gitme)
+  async getUserDataLocalOnly(userId) {
+    try {
+      return await this.localDB.getUserById(userId);
+    } catch (error) {
+      console.error('Kullanıcı verisi getirme hatası:', error);
+      return null;
+    }
+  }
+
+  // Sadece local'den kullanıcı ilerlemesini getir (Supabase'e gitme)
+  async getUserProgressLocalOnly(userId, setId) {
+    try {
+      return await this.localDB.getUserSetData(userId, setId);
+    } catch (error) {
+      console.error('İlerleme getirme hatası:', error);
+      return null;
     }
   }
 }

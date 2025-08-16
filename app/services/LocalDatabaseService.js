@@ -108,6 +108,7 @@ class LocalDatabaseService {
         CREATE TABLE IF NOT EXISTS user_words_data (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           user_id TEXT,
+          set_id INTEGER,
           word_id INTEGER,
           is_learned BOOLEAN DEFAULT 0,
           attempt_count INTEGER DEFAULT 0,
@@ -118,6 +119,15 @@ class LocalDatabaseService {
           FOREIGN KEY (user_id) REFERENCES users (user_id)
         );
       `);
+
+      // Eğer set_id kolonu yoksa ekle (mevcut tablolar için)
+      try {
+        this.db.execSync('ALTER TABLE user_words_data ADD COLUMN set_id INTEGER');
+        console.log('✅ user_words_data tablosuna set_id kolonu eklendi');
+      } catch (error) {
+        // Kolon zaten varsa hata vermez, bu normal
+        console.log('ℹ️ set_id kolonu zaten mevcut');
+      }
 
       this.db.execSync(`
         CREATE TABLE IF NOT EXISTS quiz_results (
@@ -185,6 +195,20 @@ class LocalDatabaseService {
       throw error;
     }
   }
+// app/services/LocalDatabaseService.js  (class içine, insertUserFavorite sonrası ekleyin)
+async deleteUserFavorite(userId, wordId) {
+  try {
+    const stmt = await this.db.prepareAsync(
+      'DELETE FROM user_favorites WHERE user_id = ? AND word_id = ?'
+    );
+    await stmt.executeAsync([userId, wordId]);
+    await stmt.finalizeAsync();
+  } catch (error) {
+    console.error('❌ Favori silme hatası:', error);
+    throw error;
+  }
+}
+
 
   // Categories operations
   async insertCategories(categories) {
@@ -496,11 +520,12 @@ class LocalDatabaseService {
   async insertUserWordData(wordData) {
     try {
       const stmt = await this.db.prepareAsync(
-        'INSERT OR REPLACE INTO user_words_data (user_id, word_id, is_learned, attempt_count, correct_count, learned_at, last_attempt, difficulty_rating) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT OR REPLACE INTO user_words_data (user_id, set_id, word_id, is_learned, attempt_count, correct_count, learned_at, last_attempt, difficulty_rating) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
 
       await stmt.executeAsync([
         wordData.user_id,
+        wordData.set_id,
         wordData.word_id,
         wordData.is_learned ? 1 : 0,
         wordData.attempt_count || 0,
@@ -584,6 +609,116 @@ class LocalDatabaseService {
     }
   }
 
+  async setNewUserSetData(userId, setId) {
+    try {
+      const stmt = await this.db.prepareAsync(
+        'INSERT OR REPLACE INTO user_sets_data (user_id, set_id, learned_count, total_words, average_score, completed_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      );
+      await stmt.executeAsync([userId, setId, 0, 0, 0, null, new Date().toISOString()]);
+      await stmt.finalizeAsync();
+    } catch (error) {
+      console.error('❌ Kullanıcı set verisi ekleme hatası:', error);
+      throw error;
+    }
+  }
+
+  async getIsExistUserSetData(userId, setId) {
+    try {
+      const result = await this.db.getFirstAsync(
+        'SELECT * FROM user_sets_data WHERE user_id = ? AND set_id = ?',
+        [userId, setId]
+      );
+      return result !== null;
+    } catch (error) {
+      console.error('❌ Kullanıcı set verisi kontrol hatası:', error);
+      throw error;
+    }
+  }
+
+  async getUserSetData(userId, setId) {
+
+    try {
+      const result = await this.db.getFirstAsync(
+        'SELECT * FROM user_sets_data WHERE user_id = ? AND set_id = ?',
+        [userId, setId]
+      );
+      return result;
+    } catch (error) {
+      console.error('❌ Kullanıcı set verisi getirme hatası:', error);
+      throw error;
+    }
+  }
+
+  async insertUserWordData(userId, setId, wordId) {
+
+    try {
+      const stmt = await this.db.prepareAsync(
+        'INSERT OR REPLACE INTO user_words_data (user_id, set_id, word_id, is_learned, attempt_count, correct_count, difficulty_rating, learned_at, last_attempt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      );
+      await stmt.executeAsync([userId, setId, wordId, 0, 0, 0, 0, null, null]);
+      await stmt.finalizeAsync();
+    } catch (error) {
+      console.error('❌ Kullanıcı kelime verisi ekleme hatası:', error);
+      throw error;
+    }
+  }
+
+  async getUserWordData(userId, setId, wordId) {
+
+    try {
+      const result = await this.db.getFirstAsync(
+        'SELECT * FROM user_words_data WHERE user_id = ? AND set_id = ? AND word_id = ?',
+        [userId, setId, wordId]
+      );
+      return result;
+    } catch (error) {
+      console.error('❌ Kullanıcı kelime verisi getirme hatası:', error);
+      throw error;
+    }
+  }
+
+  async updateUserWordData(userId, setId, wordId, data) {
+
+    try {
+      const stmt = await this.db.prepareAsync(
+        'UPDATE user_words_data SET is_learned = ?, attempt_count = ?, correct_count = ?, difficulty_rating = ?, learned_at = ?, last_attempt = ? WHERE user_id = ? AND set_id = ? AND word_id = ?'
+      );
+      await stmt.executeAsync([data.is_learned, data.attempt_count, data.correct_count, data.difficulty_rating, data.learned_at, data.last_attempt, userId, setId, wordId]);
+      await stmt.finalizeAsync();
+    } catch (error) {
+      console.error('❌ Kullanıcı kelime verisi güncelleme hatası:', error);
+      throw error;
+    }
+  }
+  async deleteUserWordData(userId, setId, wordId) {
+    try {
+      const stmt = await this.db.prepareAsync(
+        'DELETE FROM user_words_data WHERE user_id = ? AND set_id = ? AND word_id = ?'
+      );
+      await stmt.executeAsync([userId, setId, wordId]);
+      await stmt.finalizeAsync();
+  } catch (error) {
+    console.error('❌ Kullanıcı kelime verisi silme hatası:', error);
+    throw error;
+  }
+  }
+
+  async updateUserSetData(userId, setId, data) {
+
+    try {
+      const stmt = await this.db.prepareAsync(
+        'UPDATE user_sets_data SET learned_count = ?, total_words = ?, average_score = ?, completed_at = ?, updated_at = ? WHERE user_id = ? AND set_id = ?'
+      );
+      await stmt.executeAsync([data.learned_count, data.total_words, data.average_score, data.completed_at, new Date().toISOString(), userId, setId]);
+      await stmt.finalizeAsync();
+    } catch (error) {
+      console.error('❌ Kullanıcı set verisi güncelleme hatası:', error);
+      throw error;
+    }
+  }
+
+ 
+
   async getDatabaseVersion() {
     try {
       const result = await this.db.getFirstAsync(
@@ -597,6 +732,7 @@ class LocalDatabaseService {
     }
   }
 
+  
   // Clear all data (for testing or reset)
   async clearAllData() {
     try {

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as SystemUI from 'expo-system-ui';
 import { State } from "react-native-gesture-handler";
 import HybridDatabaseService from '../services/HybridDatabaseService';
+import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import Background from '../components/shared/Background';
 import WordCard from '../components/HomeScreen/WordCard';
@@ -14,12 +15,40 @@ const { height, width } = Dimensions.get('window');
 
 export default function HomeScreen({ navigation }) {
   const { currentTheme, themeColors, changeTheme } = useTheme();
+  const { user } = useAuth();
   const [wordSets, setWordSets] = useState([]);
   const [shuffledWords, setShuffledWords] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [themeModalVisible, setThemeModalVisible] = useState(false);
+  const [favoriteIds, setFavoriteIds] = useState(new Set());
+
+  const handleFavoriteToggle = async (word) => {
+    try {
+      if (!user?.id || !word) return;
+      const wordId = word.word_id ?? word.id ?? word.wordId;
+      if (!wordId) return;
+
+      if (favoriteIds.has(wordId)) {
+        await HybridDatabaseService.removeFavoriteWord(user.id, wordId);
+        setFavoriteIds(prev => {
+          const ns = new Set(prev);
+          ns.delete(wordId);
+          return ns;
+        });
+      } else {
+        await HybridDatabaseService.saveFavoriteWord(user.id, wordId);
+        setFavoriteIds(prev => {
+          const ns = new Set(prev);
+          ns.add(wordId);
+          return ns;
+        });
+      }
+    } catch (e) {
+      console.warn('Favori güncellenemedi:', e?.message || e);
+    }
+  };
 
   // Fetch words from Supabase
   useEffect(() => {
@@ -32,6 +61,8 @@ export default function HomeScreen({ navigation }) {
         if (data && data.length > 0) {
           // Gerçek verileri kullan
           const wordsWithMeta = data.map(word => ({
+            ...word,
+            word_id: word.word_id,
             word_text: word.word_text,
             word_meaning: word.meaning,
             example_sentence: word.example_sentence,
@@ -46,63 +77,11 @@ export default function HomeScreen({ navigation }) {
           const shuffled = shuffleArray(wordsWithMeta);
           setShuffledWords(shuffled);
         } else {
-          // Eğer veri yoksa mock data kullan
-          const mockWords = [
-            {
-              word_text: 'hello',
-              word_meaning: 'merhaba',
-              example_sentence: 'Hello, how are you?',
-              setInfo: {
-                icon: '👋',
-                title: 'Temel Kelimeler',
-                difficulty: 'Kolay',
-                gradient: ['#10B981', '#3B82F6'],
-              }
-            },
-            {
-              word_text: 'world',
-              word_meaning: 'dünya',
-              example_sentence: 'The world is beautiful.',
-              setInfo: {
-                icon: '🌍',
-                title: 'Temel Kelimeler',
-                difficulty: 'Kolay',
-                gradient: ['#10B981', '#3B82F6'],
-              }
-            },
-            {
-              word_text: 'learn',
-              word_meaning: 'öğrenmek',
-              example_sentence: 'I want to learn English.',
-              setInfo: {
-                icon: '📚',
-                title: 'Temel Kelimeler',
-                difficulty: 'Kolay',
-                gradient: ['#10B981', '#3B82F6'],
-              }
-            }
-          ];
-          
-          const shuffled = shuffleArray(mockWords);
-          setShuffledWords(shuffled);
+          setShuffledWords([]);
         }
       } catch (error) {
         console.error('Error fetching words:', error);
-        // Hata durumunda mock data kullan
-        const mockWords = [
-          {
-            word_text: 'hello',
-            word_meaning: 'merhaba',
-            example_sentence: 'Hello, how are you?',
-            setInfo: {
-              icon: '👋',
-              title: 'Temel Kelimeler',
-              difficulty: 'Kolay',
-              gradient: ['#10B981', '#3B82F6'],
-            }
-          }
-        ];
-        setShuffledWords(mockWords);
+        setShuffledWords([]);
       } finally {
         setLoading(false);
       }
@@ -110,6 +89,24 @@ export default function HomeScreen({ navigation }) {
 
     fetchWords();
   }, []);
+
+  // Favorileri yükle
+  useEffect(() => {
+    const loadFavorites = async () => {
+      if (!user?.id) return;
+      try {
+        // Sadece local'den oku (giriş yapılmışsa zaten güncel)
+        const favorites = await HybridDatabaseService.getFavoriteWordsLocalOnly(user.id);
+        const ids = new Set((favorites || []).map(f =>
+          f.word_id ?? f.wordId ?? f.word?.word_id
+        ));
+        setFavoriteIds(ids);
+      } catch (e) {
+        console.warn('Favoriler yüklenemedi:', e?.message || e);
+      }
+    };
+    loadFavorites();
+  }, [user?.id]);
 
   // 1. Kelimeleri karıştır
   function shuffleArray(array) {
@@ -250,7 +247,10 @@ export default function HomeScreen({ navigation }) {
           <SafeAreaView style={styles.safeArea}>
             <View style={styles.emptyContainer}>
               <Text style={[styles.emptyText, { color: themeColors.text }]}>
-                Henüz kelime seti bulunmuyor.
+                Kelime bulunamadı
+              </Text>
+              <Text style={[{ marginTop: 8, opacity: 0.8, color: themeColors.text }]}>
+                Lütfen daha sonra tekrar deneyin.
               </Text>
             </View>
           </SafeAreaView>
@@ -278,6 +278,10 @@ export default function HomeScreen({ navigation }) {
               onGestureEvent={onGestureEvent}
               onHandlerStateChange={onHandlerStateChange}
               isAnimating={isAnimating}
+              onFavoritePress={() => handleFavoriteToggle(displayedWord)}
+              isFavorite={!!(displayedWord && favoriteIds.has(
+                displayedWord.word_id ?? displayedWord.id ?? displayedWord.wordId
+              ))}
             />
           </View>
 

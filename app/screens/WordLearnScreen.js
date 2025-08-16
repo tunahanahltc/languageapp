@@ -22,6 +22,17 @@ export default function WordLearnScreen({ navigation, route }) {
   const [realWordCount, setRealWordCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
+
+  const [isExistUserSetData, setIsExistUserSetData] = useState(false);
+
+  useEffect(() => {
+    const checkUserSetData = async () => {
+      const userSetDataControl = await LocalDatabaseService.getIsExistUserSetData(userId, normalizedSet.id);
+      setIsExistUserSetData(userSetDataControl);
+    };
+    checkUserSetData();
+  }, [normalizedSet?.id]);
+
   useEffect(() => {
     const fetchWordCount = async () => {
       if (normalizedSet?.id) {
@@ -48,9 +59,6 @@ export default function WordLearnScreen({ navigation, route }) {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>
-            {normalizedSet ? normalizedSet.name : "Kelime Seti"}
-          </Text>
           <View style={styles.placeholder} />
           <TouchableOpacity onPress={() => null} style={styles.backButton}>
             <Icon name="refresh" size={20} color="#fff" />
