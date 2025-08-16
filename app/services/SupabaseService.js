@@ -79,6 +79,40 @@ export const getWordsBySetId = async (setId) => {
   }
 };
 
+// Get word count by set ID
+export const getWordCountBySetId = async (setId) => {
+  try {
+    // First get categories for this set
+    const { data: categories, error: catError } = await supabase
+      .from('categories')
+      .select('category_id')
+      .eq('set_id', setId);
+
+    if (catError) throw catError;
+
+    if (!categories || categories.length === 0) {
+      return 0;
+    }
+
+    const categoryIds = categories.map(cat => cat.category_id);
+
+    // Then get word count for these categories
+    const { count, error: wordsError } = await supabase
+      .from('words')
+      .select('*', { count: 'exact', head: true })
+      .in('category_id', categoryIds);
+
+    if (wordsError) throw wordsError;
+
+    return count || 0;
+  } catch (error) {
+    console.error('Error fetching word count by set ID:', error);
+    throw error;
+  }
+};
+
+
+
 // Get all categories
 export const getAllCategories = async () => {
   try {

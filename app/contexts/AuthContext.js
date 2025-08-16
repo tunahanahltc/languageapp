@@ -8,6 +8,7 @@ import {
   createUser,
   getUserById 
 } from '../services/SupabaseService';
+import HybridDatabaseService from '../services/HybridDatabaseService';
 
 const AuthContext = createContext({});
 
@@ -31,7 +32,11 @@ export const AuthProvider = ({ children }) => {
     // Auth state değişikliklerini dinle
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.id);
+        // Sadece önemli state değişikliklerini logla
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+          console.log('Auth state changed:', event, session?.user?.id);
+        }
+        
         if (session?.user) {
           setUser(session.user);
           await loadUserProfile(session.user.id);
@@ -67,7 +72,8 @@ export const AuthProvider = ({ children }) => {
 
   const loadUserProfile = async (userId) => {
     try {
-      const profile = await getUserById(userId);
+      // Sadece local'den oku (giriş yapılmışsa zaten güncel)
+      const profile = await HybridDatabaseService.getUserDataLocalOnly(userId);
       setUserProfile(profile);
     } catch (error) {
       console.error('Error loading user profile:', error);
@@ -131,12 +137,20 @@ export const AuthProvider = ({ children }) => {
       }
       
       if (authResult.data.user) {
+        // Giriş yapınca kelime verilerini kontrol et
+        await HybridDatabaseService.checkAndUpdateWordDataOnLogin();
+        
+        // Giriş yapınca tüm kullanıcı verilerini senkronize et
+        await HybridDatabaseService.syncUserDataOnLogin(authResult.data.user.id);
         await loadUserProfile(authResult.data.user.id);
       }
       
       return authResult;
     } catch (error) {
-      console.error('Login error:', error);
+      // Sadece gerçek hataları logla, auth state değişikliklerini değil
+      if (!error.message?.includes('Invalid login credentials') || !user) {
+        console.error('Login error:', error);
+      }
       throw error;
     } finally {
       setLoading(false);

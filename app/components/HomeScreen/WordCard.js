@@ -12,7 +12,9 @@ export default function WordCard({
   opacity, 
   onGestureEvent, 
   onHandlerStateChange, 
-  isAnimating 
+  isAnimating,
+  onFavoritePress,
+  isFavorite
 }) {
   return (
     <PanGestureHandler
@@ -46,8 +48,11 @@ export default function WordCard({
           <TouchableOpacity onPress={() => { /* paylaş */ }}>
             <Icon name="share" size={36} color="#FFF" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => { /* favori */ }}>
-            <Icon name="heart-o" size={36} color="#FFF" />
+          <TouchableOpacity onPress={() => {
+            console.log('KALP BASILDI!');
+            onFavoritePress && onFavoritePress();
+          }}>
+            <Icon name={isFavorite ? "heart" : "heart-o"} size={36} color="#FFF" />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => { /* yer imi */ }}>
             <Icon name="bookmark-o" size={36} color="#FFF" />
