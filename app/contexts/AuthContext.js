@@ -72,8 +72,15 @@ export const AuthProvider = ({ children }) => {
 
   const loadUserProfile = async (userId) => {
     try {
-      // Sadece local'den oku (giriş yapılmışsa zaten güncel)
-      const profile = await HybridDatabaseService.getUserDataLocalOnly(userId);
+      // Önce local'den kontrol et
+      let profile = await HybridDatabaseService.getUserDataLocalOnly(userId);
+      
+      // Eğer local'de veri yoksa Supabase'den indir (ilk giriş)
+      if (!profile) {
+        console.log('🔄 İlk giriş tespit edildi, kullanıcı profili Supabase\'den indiriliyor...');
+        profile = await HybridDatabaseService.getUserData(userId);
+      }
+      
       setUserProfile(profile);
     } catch (error) {
       console.error('Error loading user profile:', error);
@@ -132,17 +139,23 @@ export const AuthProvider = ({ children }) => {
       console.log('Login auth result:', authResult);
       
       if (authResult.error) throw authResult.error;
-      if (!authResult.data || !authResult.data.user) {
+      if (!authResult.user) {
         throw new Error('Giriş başarısız');
       }
       
-      if (authResult.data.user) {
+      if (authResult.user) {
         // Giriş yapınca kelime verilerini kontrol et
         await HybridDatabaseService.checkAndUpdateWordDataOnLogin();
         
-        // Giriş yapınca tüm kullanıcı verilerini senkronize et
-        await HybridDatabaseService.syncUserDataOnLogin(authResult.data.user.id);
-        await loadUserProfile(authResult.data.user.id);
+        // Kullanıcı profilini yükle (ilk giriş kontrolü dahil)
+        await loadUserProfile(authResult.user.id);
+        
+        // Eğer ilk giriş ise tüm kullanıcı verilerini senkronize et
+        const profile = await HybridDatabaseService.getUserDataLocalOnly(authResult.user.id);
+        if (!profile) {
+          console.log('🔄 İlk giriş için tüm kullanıcı verileri senkronize ediliyor...');
+          await HybridDatabaseService.syncUserDataOnLogin(authResult.user.id);
+        }
       }
       
       return authResult;

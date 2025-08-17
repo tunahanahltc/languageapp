@@ -408,10 +408,9 @@ async removeFavoriteWord(userId, wordId) {
       console.log('🔄 Giriş yapıldı, kullanıcı verileri senkronize ediliyor...');
       
       // Tüm kullanıcı verilerini Supabase'den çek
-      const [userProfile, favorites, progress] = await Promise.all([
+      const [userProfile, favorites] = await Promise.all([
         this.supabase.getUserById(userId),
-        this.supabase.getUserFavorites(userId),
-        this.supabase.getUserProgress(userId)
+        this.supabase.getUserFavorites(userId)
       ]);
       
       // Local'e kaydet
@@ -425,13 +424,6 @@ async removeFavoriteWord(userId, wordId) {
           await this.localDB.insertUserFavorite(userId, fav.word_id);
         }
         console.log(`✅ ${favorites.length} favori kelime senkronize edildi`);
-      }
-      
-      if (progress && progress.length > 0) {
-        for (const prog of progress) {
-          await this.localDB.insertUserSetData(prog);
-        }
-        console.log(`✅ ${progress.length} ilerleme kaydı senkronize edildi`);
       }
       
       console.log('✅ Tüm kullanıcı verileri senkronize edildi');
@@ -480,6 +472,31 @@ async removeFavoriteWord(userId, wordId) {
       return await this.localDB.getUserById(userId);
     } catch (error) {
       console.error('Kullanıcı verisi getirme hatası:', error);
+      return null;
+    }
+  }
+
+  // Kullanıcı verilerini hibrit şekilde getir (önce local, sonra Supabase)
+  async getUserData(userId) {
+    try {
+      // Önce local'den dene
+      let userData = await this.localDB.getUserById(userId);
+      if (userData) {
+        return userData;
+      }
+      
+      // Local'de yoksa Supabase'den çek ve kaydet
+      console.log('📥 Kullanıcı verisi Supabase\'den indiriliyor...');
+      userData = await this.supabase.getUserById(userId);
+      if (userData) {
+        await this.localDB.insertUser(userData);
+        console.log('✅ Kullanıcı verisi local\'e kaydedildi');
+        return userData;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Kullanıcı veri getirme hatası:', error);
       return null;
     }
   }

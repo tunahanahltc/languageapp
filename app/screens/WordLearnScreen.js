@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { useTheme } from "../contexts/ThemeContext";
+import { useAuth } from "../contexts/AuthContext";
 import Background from "../components/shared/Background";
 import Icon from 'react-native-vector-icons/Ionicons';
 import HybridDatabaseService from '../services/HybridDatabaseService';
+import LocalDatabaseService from '../services/LocalDatabaseService';
 
 export default function WordLearnScreen({ navigation, route }) {
   const { themeColors } = useTheme();
+  const { user } = useAuth();
   const { wordSet, category } = route.params || {};
 
   // Parametreleri normalize et
@@ -21,17 +24,24 @@ export default function WordLearnScreen({ navigation, route }) {
 
   const [realWordCount, setRealWordCount] = useState(0);
   const [loading, setLoading] = useState(true);
-
-
   const [isExistUserSetData, setIsExistUserSetData] = useState(false);
+  const [userSetData, setUserSetData] = useState(null);
 
   useEffect(() => {
     const checkUserSetData = async () => {
-      const userSetDataControl = await LocalDatabaseService.getIsExistUserSetData(userId, normalizedSet.id);
-      setIsExistUserSetData(userSetDataControl);
+      if (user?.id && normalizedSet?.id) {
+        const userSetDataControl = await LocalDatabaseService.getIsExistUserSetData(user.id, normalizedSet.id);
+        setIsExistUserSetData(userSetDataControl);
+        
+        // Eğer veri varsa, kullanıcının ilerleme verilerini al
+        if (userSetDataControl) {
+          const userData = await HybridDatabaseService.getUserProgress(user.id, normalizedSet.id);
+          setUserSetData(userData);
+        }
+      }
     };
     checkUserSetData();
-  }, [normalizedSet?.id]);
+  }, [user?.id, normalizedSet?.id]);
 
   useEffect(() => {
     const fetchWordCount = async () => {
@@ -51,6 +61,36 @@ export default function WordLearnScreen({ navigation, route }) {
 
     fetchWordCount();
   }, [normalizedSet?.id]);
+
+  const handlePrimaryButtonPress = async () => {
+    if (!isExistUserSetData) {
+      // İlk kez öğrenmeye başlıyor - user_sets_data tablosuna kayıt oluştur
+      try {
+        const newUserSetData = {
+          user_id: user.id,
+          set_id: normalizedSet.id,
+          learned_count: 0,
+          total_words: realWordCount,
+          average_score: 0.0,
+          completed_at: null,
+          updated_at: new Date().toISOString()
+        };
+        
+        await HybridDatabaseService.saveUserProgress(user.id, normalizedSet.id, newUserSetData);
+        
+        // State'i güncelle
+        setIsExistUserSetData(true);
+        setUserSetData(newUserSetData);
+        
+        console.log('✅ Yeni kullanıcı set verisi oluşturuldu');
+      } catch (error) {
+        console.error('❌ Kullanıcı set verisi oluşturma hatası:', error);
+      }
+    }
+    
+    // FlashcardScreen'e git
+    navigation.navigate("FlashcardScreen", { categoryId: normalizedSet.id });
+  };
 
   return (
     <View style={styles.container}>
@@ -84,14 +124,14 @@ export default function WordLearnScreen({ navigation, route }) {
 
                   <View style={styles.statItem}>
                     <Text style={styles.statNumber}>
-                      {loading ? "..." : Math.round(((normalizedSet.progress || 0) / 100) * realWordCount)}
+                      {loading ? "..." : (userSetData?.learned_count || 0)}
                     </Text>
                     <Text style={styles.statLabel}>Öğrenilen</Text>
                   </View>
 
                   <View style={styles.statItem}>
                     <Text style={styles.statNumber}>
-                      {loading ? "..." : (realWordCount - Math.round(((normalizedSet.progress || 0) / 100) * realWordCount))}
+                      {loading ? "..." : (realWordCount - (userSetData?.learned_count || 0))}
                     </Text>
                     <Text style={styles.statLabel}>Kalan</Text>
                   </View>
@@ -102,12 +142,15 @@ export default function WordLearnScreen({ navigation, route }) {
                 <View style={styles.progressHeader}>
                   <Text style={styles.progressText}>İlerleme Durumu</Text>
                   <Text style={styles.progressPercent}>
-                    %{normalizedSet.progress || 0}
+                    %{userSetData ? Math.round((userSetData.learned_count / realWordCount) * 100) : 0}
                   </Text>
                 </View>
                 <View style={styles.progressBar}>
                   <View
-                    style={[styles.progressFill, { width: `${normalizedSet.progress || 0}%`, backgroundColor: normalizedSet.color || '#3B82F6' }]}
+                    style={[styles.progressFill, { 
+                      width: `${userSetData ? Math.round((userSetData.learned_count / realWordCount) * 100) : 0}%`, 
+                      backgroundColor: normalizedSet.color || '#3B82F6' 
+                    }]}
                   />
                 </View>
               </View>
@@ -124,9 +167,11 @@ export default function WordLearnScreen({ navigation, route }) {
               <View style={styles.buttonContainer}>
                 <TouchableOpacity
                   style={[styles.primaryButton, { backgroundColor: normalizedSet.color || '#3B82F6' }]}
-                  onPress={() => navigation.navigate("FlashcardScreen", { categoryId: normalizedSet.id })}
+                  onPress={handlePrimaryButtonPress}
                 >
-                  <Text style={styles.primaryButtonText}>Öğrenmeye Başla</Text>
+                  <Text style={styles.primaryButtonText}>
+                    {isExistUserSetData ? 'Devam Et' : 'Öğrenmeye Başla'}
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.secondaryButton} onPress={() => {}}>
