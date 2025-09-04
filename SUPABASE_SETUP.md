@@ -100,24 +100,24 @@ CREATE POLICY "Words are viewable by everyone" ON words
 
 ### User Progress Table
 ```sql
-CREATE TABLE user_progress (
+CREATE TABLE user_sets_data (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   set_id UUID REFERENCES word_sets(id) ON DELETE CASCADE,
   learned_count INTEGER DEFAULT 0,
   total_words INTEGER DEFAULT 0,
-  is_completed BOOLEAN DEFAULT FALSE,
-  last_practiced_at TIMESTAMP WITH TIME ZONE,
+  average_score REAL DEFAULT 0.0,
+  completed_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(user_id, set_id)
 );
 
 -- Enable Row Level Security
-ALTER TABLE user_progress ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_sets_data ENABLE ROW LEVEL SECURITY;
 
 -- Create policy for users to manage their own progress
-CREATE POLICY "Users can manage own progress" ON user_progress
+CREATE POLICY "Users can manage own progress" ON user_sets_data
   FOR ALL USING (auth.uid() = user_id);
 ```
 
@@ -127,13 +127,14 @@ CREATE TABLE user_words_data (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   word_id UUID REFERENCES words(id) ON DELETE CASCADE,
+  set_id UUID REFERENCES word_sets(id) ON DELETE CASCADE,
   is_learned BOOLEAN DEFAULT FALSE,
   learned_at TIMESTAMP WITH TIME ZONE,
   practice_count INTEGER DEFAULT 0,
   last_practiced_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(user_id, word_id)
+  UNIQUE(user_id, word_id, set_id)
 );
 
 -- Enable Row Level Security
@@ -142,6 +143,17 @@ ALTER TABLE user_words_data ENABLE ROW LEVEL SECURITY;
 -- Create policy for users to manage their own word data
 CREATE POLICY "Users can manage own word data" ON user_words_data
   FOR ALL USING (auth.uid() = user_id);
+```
+
+### Eğer tablo zaten varsa, unique constraint eklemek için:
+```sql
+-- Mevcut tabloya unique constraint ekle
+ALTER TABLE user_words_data 
+ADD CONSTRAINT user_words_unique UNIQUE (user_id, word_id, set_id);
+
+-- user_sets_data tablosu için unique constraint ekle
+ALTER TABLE user_sets_data 
+ADD CONSTRAINT user_sets_data_unique UNIQUE (user_id, set_id);
 ```
 
 ## 4. Sample Data

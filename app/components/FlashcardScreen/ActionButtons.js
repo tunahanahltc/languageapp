@@ -11,7 +11,8 @@ export default function ActionButtons({
   repeatButtonAnimatedStyle,
   learnedIconRotateStyle,
   repeatIconRotateStyle,
-  styles
+  styles,
+  disabled = false
 }) {
   return (
     <View style={styles.actionButtonContainer}>
@@ -20,9 +21,11 @@ export default function ActionButtons({
           style={[
             styles.actionButton,
             styles.learnedButton,
-            wordStats[currentWord?.word_id]?.learned && styles.learnedButtonActive
+            wordStats[currentWord?.word_id]?.learned && styles.learnedButtonActive,
+            disabled && { opacity: 0.5 }
           ]}
           onPress={onLearnedPress}
+          disabled={disabled}
         >
           <Animated.View style={learnedIconRotateStyle}>
             <Icon name="checkmark-circle" size={24} color="#fff" />
@@ -33,8 +36,13 @@ export default function ActionButtons({
 
       <Animated.View style={repeatButtonAnimatedStyle}>
         <TouchableOpacity
-          style={[styles.actionButton, styles.repeatButton]}
+          style={[
+            styles.actionButton, 
+            styles.repeatButton,
+            disabled && { opacity: 0.5 }
+          ]}
           onPress={onRepeatPress}
+          disabled={disabled}
         >
           <Animated.View style={repeatIconRotateStyle}>
             <Icon name="refresh-circle" size={24} color="#fff" />

@@ -9,8 +9,10 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { useTheme } from "../contexts/ThemeContext";
+import { useAuth } from "../contexts/AuthContext";
 import Background from "../components/shared/Background";
 import HybridDatabaseService from "../services/HybridDatabaseService";
+import LocalDatabaseService from "../services/LocalDatabaseService";
 import ttsService from "../services/TextToSpeechService";
 import FlashcardHeader from "../components/FlashcardScreen/FlashcardHeader";
 import ProgressBar from "../components/FlashcardScreen/ProgressBar";
@@ -22,6 +24,7 @@ const { width, height } = Dimensions.get("window");
 
 export default function FlashcardScreen({ route, navigation }) {    
     const { themeColors } = useTheme();
+    const { user } = useAuth();
   const { wordSet, categoryId } = route.params;
   
   // State yönetimi
@@ -35,11 +38,18 @@ export default function FlashcardScreen({ route, navigation }) {
   // Kelime durumu takibi
   const [wordStats, setWordStats] = useState({}); // { wordId: { learned: false } }
   
+  // Öğrenilen ve tekrar edilecek kelimeleri takip et
+  const [learnedWords, setLearnedWords] = useState([]); // Öğrenilen kelimeler
+  const [repeatWords, setRepeatWords] = useState([]); // Tekrar edilecek kelimeler
+  
   // Buton animasyonları
   const [learnedIconRotation] = useState(new Animated.Value(0));
   const [repeatIconRotation] = useState(new Animated.Value(0));
   const [learnedButtonScale] = useState(new Animated.Value(1));
   const [repeatButtonScale] = useState(new Animated.Value(1));
+  
+  // Buton debounce kontrolü
+  const [isButtonDisabled, setIsButtonDisabled] = useState(false);
 
   // Kelime verilerini yükle
   useEffect(() => {
@@ -63,17 +73,90 @@ export default function FlashcardScreen({ route, navigation }) {
       }
       
       if (wordsData && wordsData.length > 0) {
-        setWords(wordsData);
-        
-        // Kelime istatistiklerini başlat
+        // Kelime istatistiklerini user_words_data'dan yükle
         const initialStats = {};
-        wordsData.forEach(word => {
-          initialStats[word.word_id] = {
-            learned: false
-          };
-        });
-        setWordStats(initialStats);
+        const wordSetId = wordSet?.id || categoryId;
         
+        if (user?.id && wordSetId) {
+          try {
+            // Toplu olarak user_words_data'dan veri çek (sadece local'den)
+            console.log('📊 Toplu user_words_data yükleniyor...');
+            let allUserWordData = await HybridDatabaseService.getAllUserWordData(user.id, wordSetId);
+            console.log(`📊 ${allUserWordData.length} user_words_data kaydı bulundu`);
+            
+            // Eğer hiç user_words_data yoksa, ilk kez açılıyor demektir - tabloyu başlat
+            if (allUserWordData.length === 0) {
+              console.log('🔄 İlk kez açılıyor, user_words_data tablosu başlatılıyor...');
+              await HybridDatabaseService.initializeSetWordsForUser(user.id, wordSetId);
+              allUserWordData = await HybridDatabaseService.getAllUserWordData(user.id, wordSetId);
+              console.log(`📊 Başlatma sonrası ${allUserWordData.length} user_words_data kaydı bulundu`);
+            }
+            
+            // Verileri word_id'ye göre map'le
+            const userWordDataMap = {};
+            allUserWordData.forEach(data => {
+              userWordDataMap[data.word_id] = data;
+            });
+            
+            // Sadece öğrenilmeyen kelimeleri filtrele
+            const unlearnedWords = wordsData.filter(word => {
+              const userWordData = userWordDataMap[word.word_id];
+              // Eğer user_word_data varsa ve is_learned false ise kelimeyi dahil et
+              return !userWordData || userWordData.is_learned !== 1;
+            });
+            
+            console.log(`📚 Toplam ${wordsData.length} kelime, ${unlearnedWords.length} öğrenilmemiş kelime`);
+            
+            // Sadece öğrenilmeyen kelimeleri set et
+            setWords(unlearnedWords);
+            
+            // Her kelime için veriyi ata
+            unlearnedWords.forEach(word => {
+              const userWordData = userWordDataMap[word.word_id];
+              if (userWordData) {
+                initialStats[word.word_id] = {
+                  learned: userWordData.is_learned === 1,
+                  attempt_count: userWordData.attempt_count || 0,
+                  correct_count: userWordData.correct_count || 0,
+                  difficulty_rating: userWordData.difficulty_rating || 0
+                };
+              } else {
+                initialStats[word.word_id] = {
+                  learned: false,
+                  attempt_count: 0,
+                  correct_count: 0,
+                  difficulty_rating: 0
+                };
+              }
+            });
+            console.log(`📊 ${unlearnedWords.length} kelime için user_words_data yüklendi`);
+          } catch (error) {
+            console.error('❌ user_words_data yükleme hatası:', error);
+            // Hata durumunda tüm kelimeleri göster
+            setWords(wordsData);
+            wordsData.forEach(word => {
+              initialStats[word.word_id] = {
+                learned: false,
+                attempt_count: 0,
+                correct_count: 0,
+                difficulty_rating: 0
+              };
+            });
+          }
+        } else {
+          // Kullanıcı yoksa tüm kelimeleri göster
+          setWords(wordsData);
+          wordsData.forEach(word => {
+            initialStats[word.word_id] = {
+              learned: false,
+              attempt_count: 0,
+              correct_count: 0,
+              difficulty_rating: 0
+            };
+          });
+        }
+        
+        setWordStats(initialStats);
         console.log(`📚 ${wordsData.length} kelime yüklendi`);
       } else {
         Alert.alert("Uyarı", "Bu kategoride henüz kelime bulunmuyor.", [
@@ -148,13 +231,33 @@ export default function FlashcardScreen({ route, navigation }) {
 
   const showCompletionAlert = () => {
     const title = categoryId ? "kategori" : wordSet?.name || "set";
+    const totalChanges = learnedWords.length + repeatWords.length;
+    
     Alert.alert(
       "🎉 Tebrikler!",
-      `${title}deki tüm kelimeleri gözden geçirdiniz!`,
+      `${title}deki tüm kelimeleri gözden geçirdiniz!\n${learnedWords.length} kelime öğrenildi, ${repeatWords.length} kelime tekrar edilecek.`,
       [
-        { text: "Tekrar Et", onPress: () => restartFlashcards() },
-        { text: "Ana Sayfaya Dön", onPress: () => navigation.navigate("Home") },
-        { text: "Geri Dön", onPress: () => navigation.goBack() }
+        { 
+          text: "💾 Kaydet & Tekrar Et", 
+          onPress: async () => {
+            await saveProgressToSupabase();
+            restartFlashcards();
+          }
+        },
+        { 
+          text: "💾 Kaydet & Ana Sayfa", 
+          onPress: async () => {
+            await saveProgressToSupabase();
+            navigation.navigate("Home");
+          }
+        },
+        { 
+          text: "💾 Kaydet & Geri Dön", 
+          onPress: async () => {
+            await saveProgressToSupabase();
+            navigation.goBack();
+          }
+        }
       ]
     );
   };
@@ -166,24 +269,165 @@ export default function FlashcardScreen({ route, navigation }) {
     slideAnimation.setValue(0);
   };
 
+  // Hem local hem Supabase'e toplu güncelleme yap
+  const saveProgressToSupabase = async () => {
+    try {
+      const wordSetId = wordSet?.id || categoryId;
+      
+      if (user?.id && wordSetId) {
+        console.log('💾 Local ve Supabase\'e toplu güncelleme yapılıyor...');
+        
+        // Tüm güncellemeleri tek array'de topla
+        const allUpdates = [];
+        
+        // Öğrenilen kelimeleri ekle
+        learnedWords.forEach(word => {
+          const wordData = {
+            is_learned: true,
+            attempt_count: (wordStats[word.word_id]?.attempt_count || 0) + 1,
+            correct_count: (wordStats[word.word_id]?.correct_count || 0) + 1,
+            learned_at: new Date().toISOString(),
+            last_attempt: new Date().toISOString()
+          };
+          
+          allUpdates.push({
+            userId: user.id,
+            setId: parseInt(wordSetId), // Integer olarak gönder
+            wordId: word.word_id,
+            wordData: wordData
+          });
+        });
+        
+        // Tekrar edilecek kelimeleri ekle
+        repeatWords.forEach(word => {
+          const wordData = {
+            is_learned: false,
+            attempt_count: (wordStats[word.word_id]?.attempt_count || 0) + 1,
+            correct_count: wordStats[word.word_id]?.correct_count || 0,
+            learned_at: null,
+            last_attempt: new Date().toISOString()
+          };
+          
+          allUpdates.push({
+            userId: user.id,
+            setId: parseInt(wordSetId), // Integer olarak gönder
+            wordId: word.word_id,
+            wordData: wordData
+          });
+        });
+        
+        // Tek seferde toplu güncelleme yap
+        if (allUpdates.length > 0) {
+          await HybridDatabaseService.batchUpdateUserWordData(allUpdates);
+          console.log(`✅ ${learnedWords.length} öğrenilen, ${repeatWords.length} tekrar edilecek kelime tek seferde güncellendi`);
+        } else {
+          console.log('📝 Güncellenecek kelime yok');
+        }
+        
+        // user_sets_data tablosunu güncelle
+        await updateUserSetProgress();
+      }
+    } catch (error) {
+      console.error('❌ Toplu güncelleme hatası:', error);
+    }
+  };
+
+  // user_sets_data tablosunu güncelle
+  const updateUserSetProgress = async () => {
+    try {
+      const wordSetId = wordSet?.id || categoryId;
+      
+      if (user?.id && wordSetId) {
+        console.log('📊 user_sets_data tablosu güncelleniyor...');
+        
+        // Önce toplam kelime sayısını al (setteki tüm kelimeler)
+        let totalWords = 0;
+        try {
+          if (categoryId) {
+            const allWords = await HybridDatabaseService.getWordsByCategoryId(categoryId);
+            totalWords = allWords?.length || 0;
+          } else if (wordSet?.id) {
+            const allWords = await HybridDatabaseService.getWordsBySetId(wordSet.id);
+            totalWords = allWords?.length || 0;
+          }
+        } catch (error) {
+          console.error('❌ Toplam kelime sayısı alınamadı:', error);
+          // Hata durumunda mevcut words array'ini kullan
+          totalWords = words.length;
+        }
+        
+        // user_words_data tablosundan o sete ait tüm kelimelerin durumunu al
+        let totalLearnedCount = 0;
+        try {
+          const allUserWordData = await HybridDatabaseService.getAllUserWordData(user.id, wordSetId);
+          // Öğrenilmiş kelimeleri say (is_learned === 1 olanlar)
+          totalLearnedCount = allUserWordData.filter(data => data.is_learned === 1).length;
+          console.log(`📊 user_words_data'dan alınan veri: ${allUserWordData.length} kelime, ${totalLearnedCount} öğrenilmiş`);
+        } catch (error) {
+          console.error('❌ user_words_data verisi alınamadı:', error);
+          // Hata durumunda sadece bu oturumdaki öğrenilen kelimeleri say
+          totalLearnedCount = learnedWords.length;
+        }
+        
+        // Kalan kelime sayısını hesapla
+        const remainingCount = totalWords - totalLearnedCount;
+        
+        // Ortalama skor hesapla (basit hesaplama)
+        const averageScore = totalWords > 0 ? (totalLearnedCount / totalWords) * 100 : 0;
+        
+        // Tamamlanma durumunu kontrol et
+        const isCompleted = totalLearnedCount === totalWords;
+        const completedAt = isCompleted ? new Date().toISOString() : null;
+        
+        const progressData = {
+          learned_count: totalLearnedCount,
+          total_words: totalWords,
+          average_score: averageScore,
+          completed_at: completedAt
+        };
+        
+        console.log('📊 Progress verisi:', progressData);
+        console.log(`📚 Toplam: ${totalWords}, Öğrenilmiş: ${totalLearnedCount}, Kalan: ${totalWords - totalLearnedCount}`);
+        
+        // set_id'yi integer olarak gönder (Supabase'deki tablo yapısına uygun)
+        const setIdForSupabase = parseInt(wordSetId);
+        console.log(`🔢 set_id integer'a çevrildi: ${wordSetId} -> ${setIdForSupabase}`);
+        
+        // Hibrit servis ile güncelle
+        await HybridDatabaseService.updateUserProgress(user.id, setIdForSupabase, progressData);
+        
+        console.log(`✅ user_sets_data güncellendi: ${totalLearnedCount}/${totalWords} kelime öğrenildi`);
+      }
+    } catch (error) {
+      console.error('❌ user_sets_data güncelleme hatası:', error);
+    }
+  };
+
   // Geri butonuna basıldığında uyarı göster
   const handleBackPress = () => {
+    const totalChanges = learnedWords.length + repeatWords.length;
+    
+    if (totalChanges === 0) {
+      // Hiç değişiklik yoksa direkt çık
+      navigation.goBack();
+      return;
+    }
+    
     Alert.alert(
       "📚 Çalışmayı Bitir?",
-      `${currentIndex + 1}/${words.length} kelime tamamlandı.\nİlerlemenizi kaydetmek ister misiniz?`,
+      `${currentIndex + 1}/${words.length} kelime tamamlandı.\n${learnedWords.length} kelime öğrenildi, ${repeatWords.length} kelime tekrar edilecek.\nİlerlemenizi kaydetmek ister misiniz?`,
       [
         {
           text: "❌ Kaydetme",
           onPress: () => {
-            // Boş fonksiyon - kaydetmeden geri git
             navigation.goBack();
           },
           style: "cancel"
         },
         {
           text: "💾 Kaydet & Çık",
-          onPress: () => {
-            // Boş fonksiyon - kaydetmeden geri git (şimdilik)
+          onPress: async () => {
+            await saveProgressToSupabase();
             navigation.goBack();
           }
         }
@@ -219,9 +463,15 @@ export default function FlashcardScreen({ route, navigation }) {
   };
 
   // Öğrendim butonuna basıldığında
-  const markAsLearned = () => {
+  const markAsLearned = async () => {
+    // Eğer buton zaten devre dışıysa, işlemi engelle
+    if (isButtonDisabled) return;
+    
     const currentWord = words[currentIndex];
     if (!currentWord) return;
+    
+    // Butonu devre dışı bırak
+    setIsButtonDisabled(true);
     
     // Animasyonu başlat
     animateButton(learnedIconRotation, learnedButtonScale);
@@ -234,18 +484,43 @@ export default function FlashcardScreen({ route, navigation }) {
       }
     }));
     
+    // Öğrenilen kelimeler listesine ekle
+    setLearnedWords(prev => {
+      const exists = prev.find(word => word.word_id === currentWord.word_id);
+      if (!exists) {
+        return [...prev, currentWord];
+      }
+      return prev;
+    });
+    
+    // Tekrar edilecek kelimeler listesinden çıkar (eğer varsa)
+    setRepeatWords(prev => prev.filter(word => word.word_id !== currentWord.word_id));
+    
+    // Local güncelleme yapma, sadece listelere ekle/çıkar
+    console.log(`✅ ${currentWord.word_text} öğrenildi olarak işaretlendi (çıkışta kaydedilecek)`);
+    
     console.log(`✅ ${currentWord.word_text} öğrenildi olarak işaretlendi`);
     
     // Otomatik olarak sonraki kelimeye geç
     setTimeout(() => {
       nextWord();
+      // Animasyon tamamlandıktan sonra butonu tekrar aktif et
+      setTimeout(() => {
+        setIsButtonDisabled(false);
+      }, 300);
     }, 700); // Animasyon için biraz daha uzun
   };
 
   // Tekrar Et butonuna basıldığında
-  const markForRepeat = () => {
+  const markForRepeat = async () => {
+    // Eğer buton zaten devre dışıysa, işlemi engelle
+    if (isButtonDisabled) return;
+    
     const currentWord = words[currentIndex];
     if (!currentWord) return;
+    
+    // Butonu devre dışı bırak
+    setIsButtonDisabled(true);
     
     // Animasyonu başlat
     animateButton(repeatIconRotation, repeatButtonScale);
@@ -258,11 +533,30 @@ export default function FlashcardScreen({ route, navigation }) {
       }
     }));
     
+    // Tekrar edilecek kelimeler listesine ekle
+    setRepeatWords(prev => {
+      const exists = prev.find(word => word.word_id === currentWord.word_id);
+      if (!exists) {
+        return [...prev, currentWord];
+      }
+      return prev;
+    });
+    
+    // Öğrenilen kelimeler listesinden çıkar (eğer varsa)
+    setLearnedWords(prev => prev.filter(word => word.word_id !== currentWord.word_id));
+    
+    // Local güncelleme yapma, sadece listelere ekle/çıkar
+    console.log(`🔄 ${currentWord.word_text} tekrar edilecek olarak işaretlendi (çıkışta kaydedilecek)`);
+    
     console.log(`🔄 ${currentWord.word_text} tekrar edilecek`);
     
     // Otomatik olarak sonraki kelimeye geç
     setTimeout(() => {
       nextWord();
+      // Animasyon tamamlandıktan sonra butonu tekrar aktif et
+      setTimeout(() => {
+        setIsButtonDisabled(false);
+      }, 300);
     }, 700); // Animasyon için biraz daha uzun
   };
 
@@ -388,6 +682,7 @@ export default function FlashcardScreen({ route, navigation }) {
           learnedIconRotateStyle={learnedIconRotateStyle}
           repeatIconRotateStyle={repeatIconRotateStyle}
           styles={flashcardStyles}
+          disabled={isButtonDisabled}
         />
       </View>
     </Background>

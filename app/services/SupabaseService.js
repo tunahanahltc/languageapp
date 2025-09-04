@@ -287,17 +287,26 @@ export const getUserProgress = async (userId, setId) => {
 
 export const updateUserProgress = async (userId, setId, progressData) => {
   try {
+    console.log('📤 updateUserProgress çağrıldı:', { userId, setId, progressData });
+    
     const { data, error } = await supabase
       .from('user_sets_data')
       .upsert([{
         user_id: userId,
         set_id: setId,
         ...progressData
-      }])
+      }], {
+        onConflict: 'user_id,set_id'
+      })
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Supabase updateUserProgress hatası:', error);
+      throw error;
+    }
+    
+    console.log('✅ Supabase updateUserProgress başarılı:', data);
     return data;
   } catch (error) {
     console.error('Error updating user progress:', error);
@@ -305,15 +314,47 @@ export const updateUserProgress = async (userId, setId, progressData) => {
   }
 };
 
-// User Words Data Operations
-export const getUserWordData = async (userId, wordId) => {
+export const insertUserProgress = async (userId, setId, progressData) => {
   try {
+    console.log('📤 insertUserProgress çağrıldı:', { userId, setId, progressData });
+    
     const { data, error } = await supabase
+      .from('user_sets_data')
+      .insert([{
+        user_id: userId,
+        set_id: setId,
+        ...progressData
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Supabase insertUserProgress hatası:', error);
+      throw error;
+    }
+    
+    console.log('✅ Supabase insertUserProgress başarılı:', data);
+    return data;
+  } catch (error) {
+    console.error('Error inserting user progress:', error);
+    throw error;
+  }
+};
+
+// User Words Data Operations
+export const getUserWordData = async (userId, wordId, setId = null) => {
+  try {
+    let query = supabase
       .from('user_words_data')
       .select('*')
       .eq('user_id', userId)
-      .eq('word_id', wordId)
-      .single();
+      .eq('word_id', wordId);
+    
+    if (setId) {
+      query = query.eq('set_id', setId);
+    }
+    
+    const { data, error } = await query.single();
 
     if (error) throw error;
     return data;
@@ -325,20 +366,55 @@ export const getUserWordData = async (userId, wordId) => {
 
 export const updateUserWordData = async (userId, wordId, wordData) => {
   try {
+    console.log('📤 updateUserWordData çağrıldı:', { userId, wordId, wordData });
+    
     const { data, error } = await supabase
       .from('user_words_data')
       .upsert([{
         user_id: userId,
         word_id: wordId,
         ...wordData
-      }])
+      }], {
+        onConflict: 'user_id,word_id,set_id'
+      })
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Supabase updateUserWordData hatası:', error);
+      throw error;
+    }
+    
+    console.log('✅ Supabase updateUserWordData başarılı:', data);
     return data;
   } catch (error) {
     console.error('Error updating user word data:', error);
+    throw error;
+  }
+};
+
+// Toplu güncelleme - birden fazla kelimeyi tek seferde güncelle
+export const batchUpdateUserWordData = async (updates) => {
+  try {
+    console.log(`📦 Supabase'de ${updates.length} kelime toplu güncelleniyor...`);
+    
+    // Tüm güncellemeleri tek seferde upsert et
+    const { data, error } = await supabase
+      .from('user_words_data')
+      .upsert(updates, {
+        onConflict: 'user_id,word_id,set_id'
+      })
+      .select();
+
+    if (error) {
+      console.error('❌ Supabase toplu güncelleme hatası:', error);
+      throw error;
+    }
+    
+    console.log(`✅ Supabase'de ${data.length} kelime toplu güncellendi`);
+    return data;
+  } catch (error) {
+    console.error('Error batch updating user word data:', error);
     throw error;
   }
 };
@@ -408,6 +484,32 @@ export const removeFromFavorites = async (userId, wordId) => {
     return true;
   } catch (error) {
     console.error('Error removing from favorites:', error);
+    throw error;
+  }
+};
+
+// Batch insert user word data
+export const batchInsertUserWordData = async (wordDataArray) => {
+  try {
+    console.log('📤 batchInsertUserWordData çağrıldı, veri sayısı:', wordDataArray.length);
+    console.log('📤 İlk veri örneği:', wordDataArray[0]);
+    
+    const { data, error } = await supabase
+      .from('user_words_data')
+      .upsert(wordDataArray, {
+        onConflict: 'user_id,word_id,set_id'
+      })
+      .select();
+
+    if (error) {
+      console.error('❌ Supabase batch insert hatası:', error);
+      throw error;
+    }
+    
+    console.log('✅ Supabase batch insert başarılı, dönen veri sayısı:', data?.length || 0);
+    return data;
+  } catch (error) {
+    console.error('Error batch inserting user word data:', error);
     throw error;
   }
 };
@@ -518,10 +620,13 @@ export default {
   // Progress
   getUserProgress,
   updateUserProgress,
+  insertUserProgress,
   
   // Word Data
   getUserWordData,
   updateUserWordData,
+  batchUpdateUserWordData,
+  batchInsertUserWordData,
   
   // Quiz
   saveQuizResult,

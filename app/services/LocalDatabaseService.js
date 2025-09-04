@@ -116,7 +116,8 @@ class LocalDatabaseService {
           learned_at TEXT,
           last_attempt TEXT,
           difficulty_rating INTEGER DEFAULT 0,
-          FOREIGN KEY (user_id) REFERENCES users (user_id)
+          FOREIGN KEY (user_id) REFERENCES users (user_id),
+          UNIQUE(user_id, word_id, set_id)
         );
       `);
 
@@ -127,6 +128,15 @@ class LocalDatabaseService {
       } catch (error) {
         // Kolon zaten varsa hata vermez, bu normal
         console.log('ℹ️ set_id kolonu zaten mevcut');
+      }
+
+      // Unique constraint ekle (mevcut tablolar için)
+      try {
+        this.db.execSync('CREATE UNIQUE INDEX IF NOT EXISTS user_words_unique ON user_words_data (user_id, word_id, set_id)');
+        console.log('✅ user_words_data tablosuna unique constraint eklendi');
+      } catch (error) {
+        // Index zaten varsa hata vermez, bu normal
+        console.log('ℹ️ unique constraint zaten mevcut');
       }
 
       this.db.execSync(`
@@ -400,6 +410,8 @@ async deleteUserFavorite(userId, wordId) {
 
   async getWordsBySetId(setId) {
     try {
+      console.log(`🔍 getWordsBySetId çağrıldı, setId: ${setId}`);
+      
       const result = await this.db.getAllAsync(
         `SELECT wt.* FROM word_translations wt
          INNER JOIN words w ON wt.word_id = w.word_id
@@ -408,6 +420,12 @@ async deleteUserFavorite(userId, wordId) {
          ORDER BY wt.created_at`,
         [setId, 'en']
       );
+      
+      console.log(`📊 getWordsBySetId sonucu: ${result?.length || 0} kelime bulundu`);
+      if (result && result.length > 0) {
+        console.log(`📝 İlk kelime örneği:`, result[0]);
+      }
+      
       return result;
     } catch (error) {
       console.error('❌ Set kelimelerini getirme hatası:', error);
@@ -519,11 +537,13 @@ async deleteUserFavorite(userId, wordId) {
   // User word data operations
   async insertUserWordData(wordData) {
     try {
+      console.log('📝 insertUserWordData çağrıldı:', wordData);
+      
       const stmt = await this.db.prepareAsync(
-        'INSERT OR REPLACE INTO user_words_data (user_id, set_id, word_id, is_learned, attempt_count, correct_count, learned_at, last_attempt, difficulty_rating) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT OR REPLACE INTO user_words_data (user_id, set_id, word_id, is_learned, attempt_count, correct_count, learned_at, last_attempt, difficulty_rating) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
 
-      await stmt.executeAsync([
+      const params = [
         wordData.user_id,
         wordData.set_id,
         wordData.word_id,
@@ -533,9 +553,12 @@ async deleteUserFavorite(userId, wordId) {
         wordData.learned_at,
         wordData.last_attempt,
         wordData.difficulty_rating || 0
-      ]);
+      ];
 
+      console.log('📝 SQL parametreleri:', params);
+      await stmt.executeAsync(params);
       await stmt.finalizeAsync();
+      console.log('✅ insertUserWordData başarılı');
     } catch (error) {
       console.error('❌ Kullanıcı kelime verisi ekleme hatası:', error);
       throw error;
@@ -649,19 +672,7 @@ async deleteUserFavorite(userId, wordId) {
     }
   }
 
-  async insertUserWordData(userId, setId, wordId) {
 
-    try {
-      const stmt = await this.db.prepareAsync(
-        'INSERT OR REPLACE INTO user_words_data (user_id, set_id, word_id, is_learned, attempt_count, correct_count, difficulty_rating, learned_at, last_attempt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      );
-      await stmt.executeAsync([userId, setId, wordId, 0, 0, 0, 0, null, null]);
-      await stmt.finalizeAsync();
-    } catch (error) {
-      console.error('❌ Kullanıcı kelime verisi ekleme hatası:', error);
-      throw error;
-    }
-  }
 
   async getUserWordData(userId, setId, wordId) {
 
@@ -677,6 +688,53 @@ async deleteUserFavorite(userId, wordId) {
     }
   }
 
+  // Toplu olarak user_words_data getir
+  async getAllUserWordData(userId, setId) {
+    try {
+      console.log(`🔍 Local'den user_words_data aranıyor: userId=${userId}, setId=${setId}`);
+      
+      // Önce tablo var mı kontrol et
+      const tableCheck = await this.db.getFirstAsync(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='user_words_data'"
+      );
+      console.log('📋 user_words_data tablosu var mı:', !!tableCheck);
+      
+      if (!tableCheck) {
+        console.error('❌ user_words_data tablosu bulunamadı!');
+        return [];
+      }
+      
+      // Yanlış formattaki verileri temizle
+      const wrongFormatRecords = await this.db.getAllAsync(
+        "SELECT * FROM user_words_data WHERE user_id LIKE '%user_id=%' OR user_id LIKE '%set_id=%'"
+      );
+      if (wrongFormatRecords.length > 0) {
+        console.log(`🧹 ${wrongFormatRecords.length} yanlış formatlı kayıt temizleniyor...`);
+        await this.db.runAsync('DELETE FROM user_words_data WHERE user_id LIKE ? OR user_id LIKE ?', 
+          ['%user_id=%', '%set_id=%']);
+        console.log('✅ Yanlış formatlı kayıtlar temizlendi');
+      }
+      
+      // Şimdi spesifik sorguyu yap
+      const result = await this.db.getAllAsync(
+        'SELECT * FROM user_words_data WHERE user_id = ? AND set_id = ?',
+        [userId, setId]
+      );
+      
+      console.log(`📊 Local'den ${result.length} user_words_data kaydı bulundu`);
+      console.log(`🔍 Aranan: userId="${userId}" (tip: ${typeof userId}), setId="${setId}" (tip: ${typeof setId})`);
+      
+      if (result.length > 0) {
+        console.log('📝 İlk kayıt örneği:', result[0]);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('❌ Toplu kullanıcı kelime verisi getirme hatası:', error);
+      return [];
+    }
+  }
+
   async updateUserWordData(userId, setId, wordId, data) {
 
     try {
@@ -687,6 +745,38 @@ async deleteUserFavorite(userId, wordId) {
       await stmt.finalizeAsync();
     } catch (error) {
       console.error('❌ Kullanıcı kelime verisi güncelleme hatası:', error);
+      throw error;
+    }
+  }
+
+  // Toplu güncelleme - birden fazla kelimeyi tek seferde güncelle
+  async batchUpdateUserWordData(updates) {
+    try {
+      console.log(`📦 Local'de ${updates.length} kelime toplu güncelleniyor...`);
+      
+      // Her güncelleme için ayrı statement hazırla ve çalıştır
+      const promises = updates.map(async (update) => {
+        const stmt = await this.db.prepareAsync(
+          'UPDATE user_words_data SET is_learned = ?, attempt_count = ?, correct_count = ?, difficulty_rating = ?, learned_at = ?, last_attempt = ? WHERE user_id = ? AND set_id = ? AND word_id = ?'
+        );
+        await stmt.executeAsync([
+          update.data.is_learned, 
+          update.data.attempt_count, 
+          update.data.correct_count, 
+          update.data.difficulty_rating, 
+          update.data.learned_at, 
+          update.data.last_attempt, 
+          update.userId, 
+          update.setId, 
+          update.wordId
+        ]);
+        await stmt.finalizeAsync();
+      });
+      
+      await Promise.all(promises);
+      console.log(`✅ Local'de ${updates.length} kelime toplu güncellendi`);
+    } catch (error) {
+      console.error('❌ Toplu local güncelleme hatası:', error);
       throw error;
     }
   }
@@ -704,16 +794,54 @@ async deleteUserFavorite(userId, wordId) {
   }
 
   async updateUserSetData(userId, setId, data) {
-
     try {
-      const stmt = await this.db.prepareAsync(
-        'UPDATE user_sets_data SET learned_count = ?, total_words = ?, average_score = ?, completed_at = ?, updated_at = ? WHERE user_id = ? AND set_id = ?'
-      );
-      await stmt.executeAsync([data.learned_count, data.total_words, data.average_score, data.completed_at, new Date().toISOString(), userId, setId]);
-      await stmt.finalizeAsync();
+      console.log(`🔄 Local updateUserSetData çağrıldı: User ${userId}, Set ${setId}, Data:`, data);
+      
+      // Önce kayıt var mı kontrol et
+      const existingData = await this.getUserSetData(userId, setId);
+      console.log('🔍 Mevcut local veri:', existingData);
+      
+      if (existingData) {
+        // Kayıt varsa UPDATE yap
+        console.log('🔄 Mevcut kayıt güncelleniyor...');
+        const stmt = await this.db.prepareAsync(
+          'UPDATE user_sets_data SET learned_count = ?, total_words = ?, average_score = ?, completed_at = ?, updated_at = ? WHERE user_id = ? AND set_id = ?'
+        );
+        await stmt.executeAsync([data.learned_count, data.total_words, data.average_score, data.completed_at, new Date().toISOString(), userId, setId]);
+        await stmt.finalizeAsync();
+        console.log('✅ Local user_sets_data güncellendi (UPDATE)');
+      } else {
+        // Kayıt yoksa INSERT yap
+        console.log('🔄 Yeni kayıt ekleniyor...');
+        const stmt = await this.db.prepareAsync(
+          'INSERT INTO user_sets_data (user_id, set_id, learned_count, total_words, average_score, completed_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        );
+        await stmt.executeAsync([userId, setId, data.learned_count, data.total_words, data.average_score, data.completed_at, new Date().toISOString()]);
+        await stmt.finalizeAsync();
+        console.log('✅ Local user_sets_data eklendi (INSERT)');
+      }
+      
+      // Güncelleme sonrası veriyi kontrol et
+      const updatedData = await this.getUserSetData(userId, setId);
+      console.log('🔍 Güncelleme sonrası local veri:', updatedData);
     } catch (error) {
       console.error('❌ Kullanıcı set verisi güncelleme hatası:', error);
       throw error;
+    }
+  }
+
+  // Kullanıcının tüm set verilerini getir
+  async getAllUserSetData(userId) {
+    try {
+      const result = await this.db.getAllAsync(
+        'SELECT * FROM user_sets_data WHERE user_id = ?',
+        [userId]
+      );
+      console.log(`📊 getAllUserSetData: ${result.length} kayıt bulundu`);
+      return result;
+    } catch (error) {
+      console.error('❌ getAllUserSetData hatası:', error);
+      return [];
     }
   }
 
@@ -744,6 +872,49 @@ async deleteUserFavorite(userId, wordId) {
       console.log('🗑️ Veritabanı temizlendi');
     } catch (error) {
       console.error('❌ Veritabanı temizleme hatası:', error);
+      throw error;
+    }
+  }
+
+  // Duplicate user_words_data kayıtlarını bul
+  async findDuplicateUserWords() {
+    try {
+      const result = await this.db.getAllAsync(`
+        SELECT user_id, word_id, set_id, COUNT(*) as count
+        FROM user_words_data 
+        GROUP BY user_id, word_id, set_id 
+        HAVING COUNT(*) > 1
+      `);
+      return result;
+    } catch (error) {
+      console.error('❌ Duplicate kayıt bulma hatası:', error);
+      return [];
+    }
+  }
+
+  // Duplicate user_words_data kayıtlarını temizle
+  async cleanDuplicateUserWords() {
+    try {
+      // Önce duplicate kayıtları bul
+      const duplicates = await this.findDuplicateUserWords();
+      
+      for (const duplicate of duplicates) {
+        // Her duplicate grup için en son eklenen kaydı tut, diğerlerini sil
+        await this.db.execAsync(`
+          DELETE FROM user_words_data 
+          WHERE user_id = ? AND word_id = ? AND set_id = ? 
+          AND id NOT IN (
+            SELECT MAX(id) 
+            FROM user_words_data 
+            WHERE user_id = ? AND word_id = ? AND set_id = ?
+          )
+        `, [duplicate.user_id, duplicate.word_id, duplicate.set_id, 
+            duplicate.user_id, duplicate.word_id, duplicate.set_id]);
+      }
+      
+      console.log(`✅ ${duplicates.length} duplicate grup temizlendi`);
+    } catch (error) {
+      console.error('❌ Duplicate temizleme hatası:', error);
       throw error;
     }
   }

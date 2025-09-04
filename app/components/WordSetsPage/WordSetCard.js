@@ -156,6 +156,13 @@ const WordSetCard = memo(function WordSetCard({ wordSet, onPress, index = 0 }) {
                 <Text style={styles.progressText}>{progress}%</Text>
               </View>
               
+              {/* Progress details */}
+              {wordSet.learned_count !== undefined && wordSet.total !== undefined && (
+                <Text style={styles.progressDetails}>
+                  {wordSet.learned_count}/{wordSet.total} kelime
+                </Text>
+              )}
+              
               {/* Modern progress bar */}
               <View style={styles.progressBarContainer}>
                 <View style={styles.progressBarBg}>
@@ -304,6 +311,13 @@ const styles = StyleSheet.create({
      fontWeight: '700',
      fontSize: 11,
      letterSpacing: -0.3,
+   },
+   progressDetails: {
+     color: '#6B7280',
+     fontSize: 9,
+     fontWeight: '500',
+     marginBottom: 4,
+     textAlign: 'center',
    },
    progressBarContainer: {
      alignItems: 'center',

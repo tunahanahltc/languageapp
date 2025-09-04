@@ -236,7 +236,7 @@ export default function EnhancedCategoryFilter({
       
       >
         <LinearGradient
-          colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.85)']}
+          colors={['rgba(255,255,255,0.95)', 'rgba(26, 19, 19, 0.85)']}
           style={styles.buttonGradient}
         >
           <View style={styles.selectedContent}>

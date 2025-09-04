@@ -34,6 +34,9 @@ class HybridDatabaseService {
       // Database versiyonunu güncelle
       await this.localDB.updateDatabaseVersion(new Date().toISOString());
       
+      // Duplicate kayıtları kontrol et ve temizle
+      await this.checkAndCleanDuplicateUserWords();
+      
       this.isInitialized = true;
       console.log('✅ Veritabanı başarıyla başlatıldı');
       
@@ -229,25 +232,99 @@ async removeFavoriteWord(userId, wordId) {
     }
   }
 
+  // Kullanıcı ilerleme verilerini güncelle (hibrit)
+  async updateUserProgress(userId, setId, progressData) {
+    try {
+      console.log(`🔄 Kullanıcı ilerleme güncelleniyor: User ${userId}, Set ${setId}`);
+      console.log(`📊 Progress data:`, progressData);
+      console.log('🚨 updateUserProgress fonksiyonu çalışıyor!');
+      
+      // Önce yerel'e güncelle
+      console.log('🔄 Local güncelleme başlatılıyor...');
+      try {
+        await this.localDB.updateUserSetData(userId, setId, progressData);
+        console.log('✅ Local veritabanında güncellendi');
+      } catch (localError) {
+        console.error('❌ Local güncelleme hatası:', localError);
+        throw localError;
+      }
+      
+      // Sonra Supabase'e güncelle
+      try {
+        await this.supabase.updateUserProgress(userId, setId, progressData);
+        console.log('✅ Supabase\'de güncellendi');
+      } catch (supabaseError) {
+        console.error('⚠️ Supabase güncelleme hatası (local devam ediyor):', supabaseError);
+        
+        // Eğer Supabase'de kayıt yoksa, önce ekle sonra güncelle
+        if (supabaseError.code === '23505') { // Unique constraint violation
+          console.log('🔄 Supabase\'de kayıt yok, önce ekleniyor...');
+          try {
+            await this.supabase.insertUserProgress(userId, setId, progressData);
+            console.log('✅ Supabase\'e kayıt eklendi');
+          } catch (insertError) {
+            console.error('❌ Supabase\'e kayıt ekleme hatası:', insertError);
+          }
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Kullanıcı ilerleme güncelleme hatası:', error);
+      throw error;
+    }
+  }
+
   // Kullanıcı ilerleme verilerini getir (hibrit)
   async getUserProgress(userId, setId) {
     try {
-      // Önce yerel'den dene
+      console.log(`🔄 getUserProgress çağrıldı: User ${userId}, Set ${setId}`);
+      
+      // Önce local'den dene (hızlı erişim için)
       const localProgress = await this.localDB.getUserSetData(userId, setId);
       if (localProgress) {
+        console.log('📱 Local\'den veri alındı:', localProgress);
         return localProgress;
       }
       
-      // Yerel yoksa Supabase'den çek
-      const supabaseProgress = await this.supabase.getUserProgress(userId, setId);
-      if (supabaseProgress) {
-        await this.localDB.insertUserSetData(supabaseProgress);
-        return supabaseProgress;
+      // Local'de yoksa Supabase'den çek
+      try {
+        const supabaseProgress = await this.supabase.getUserProgress(userId, setId);
+        if (supabaseProgress) {
+          console.log('✅ Supabase\'den veri alındı:', supabaseProgress);
+          // Local'e kaydet
+          await this.localDB.insertUserSetData(supabaseProgress);
+          console.log('✅ Local veritabanına kaydedildi');
+          return supabaseProgress;
+        }
+      } catch (supabaseError) {
+        console.error('⚠️ Supabase\'den veri alınamadı:', supabaseError);
       }
       
+      console.log('❌ Hiçbir yerden veri alınamadı');
       return null;
     } catch (error) {
-      console.error('İlerleme getirme hatası:', error);
+      console.error('❌ İlerleme getirme hatası:', error);
+      return null;
+    }
+  }
+
+  // Kullanıcı ilerleme verilerini getir (sadece local'den)
+  async getUserProgressLocalOnly(userId, setId) {
+    try {
+      console.log(`🔄 getUserProgressLocalOnly çağrıldı: User ${userId}, Set ${setId}`);
+      
+      // Sadece local'den veri çek
+      const localProgress = await this.localDB.getUserSetData(userId, setId);
+      if (localProgress) {
+        console.log('📱 Local\'den veri alındı:', localProgress);
+        return localProgress;
+      }
+      
+      console.log('❌ Local\'de veri bulunamadı');
+      return null;
+    } catch (error) {
+      console.error('❌ Local ilerleme getirme hatası:', error);
       return null;
     }
   }
@@ -269,6 +346,28 @@ async removeFavoriteWord(userId, wordId) {
     } catch (error) {
       console.error('Kelime öğrenme durumu kaydetme hatası:', error);
       throw error;
+    }
+  }
+
+  // Unique constraint kontrolü ve temizleme
+  async checkAndCleanDuplicateUserWords() {
+    try {
+      console.log('🔍 Duplicate user_words_data kayıtları kontrol ediliyor...');
+      
+      // Yerel veritabanından duplicate kayıtları bul ve temizle
+      const duplicates = await this.localDB.findDuplicateUserWords();
+      if (duplicates && duplicates.length > 0) {
+        console.log(`🧹 ${duplicates.length} duplicate kayıt bulundu, temizleniyor...`);
+        await this.localDB.cleanDuplicateUserWords();
+        console.log('✅ Duplicate kayıtlar temizlendi');
+      } else {
+        console.log('✅ Duplicate kayıt bulunamadı');
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Duplicate kontrol hatası:', error);
+      return false;
     }
   }
 
@@ -508,6 +607,188 @@ async removeFavoriteWord(userId, wordId) {
     } catch (error) {
       console.error('İlerleme getirme hatası:', error);
       return null;
+    }
+  }
+
+  // Kullanıcı kelime verilerini güncelle (hem local hem Supabase)
+  async updateUserWordData(userId, setId, wordId, wordData) {
+    try {
+      console.log(`🔄 Kullanıcı kelime verisi güncelleniyor: User ${userId}, Set ${setId}, Word ${wordId}`);
+      
+      // Local'e güncelle
+      await this.localDB.updateUserWordData(userId, setId, wordId, wordData);
+      console.log('✅ Local veritabanında güncellendi');
+      
+      // Supabase'e güncelle
+      try {
+        await this.supabase.updateUserWordData(userId, wordId, {
+          set_id: setId,
+          ...wordData
+        });
+        console.log('✅ Supabase\'de güncellendi');
+      } catch (supabaseError) {
+        console.error('⚠️ Supabase güncelleme hatası (local devam ediyor):', supabaseError);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Kullanıcı kelime verisi güncelleme hatası:', error);
+      throw error;
+    }
+  }
+
+  // Toplu güncelleme - birden fazla kelimeyi tek seferde güncelle
+  async batchUpdateUserWordData(updates) {
+    try {
+      console.log(`📦 Hibrit toplu güncelleme başlatılıyor: ${updates.length} kelime`);
+      
+      // Local için güncelleme formatını hazırla
+      const localUpdates = updates.map(update => ({
+        userId: update.userId,
+        setId: update.setId,
+        wordId: update.wordId,
+        data: update.wordData
+      }));
+      
+      // Supabase için güncelleme formatını hazırla
+      const supabaseUpdates = updates.map(update => ({
+        user_id: update.userId,
+        word_id: update.wordId,
+        set_id: update.setId,
+        ...update.wordData
+      }));
+      
+      // Paralel olarak hem local hem Supabase'e gönder
+      await Promise.all([
+        this.localDB.batchUpdateUserWordData(localUpdates),
+        this.supabase.batchUpdateUserWordData(supabaseUpdates)
+      ]);
+      
+      console.log(`✅ ${updates.length} kelime hibrit toplu güncellendi`);
+    } catch (error) {
+      console.error('❌ Hibrit toplu güncelleme hatası:', error);
+      throw error;
+    }
+  }
+
+  // Kullanıcı kelime verilerini getir (hibrit - önce local, sonra Supabase)
+  async getUserWordData(userId, setId, wordId) {
+    try {
+      // Önce local'den dene
+      let userWordData = await this.localDB.getUserWordData(userId, setId, wordId);
+      if (userWordData) {
+        return userWordData;
+      }
+      
+      // Local'de yoksa Supabase'den çek ve kaydet
+      console.log('📥 Kullanıcı kelime verisi Supabase\'den indiriliyor...');
+      userWordData = await this.supabase.getUserWordData(userId, wordId, setId);
+      if (userWordData) {
+        await this.localDB.insertUserWordData(userWordData);
+        console.log('✅ Kullanıcı kelime verisi local\'e kaydedildi');
+        return userWordData;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Kullanıcı kelime veri getirme hatası:', error);
+      return null;
+    }
+  }
+
+  // Toplu olarak kullanıcı kelime verilerini getir (sadece local'den)
+  async getAllUserWordData(userId, setId) {
+    try {
+      // Sadece local'den çek, Supabase'den çekme
+      const userWordData = await this.localDB.getAllUserWordData(userId, setId);
+      return userWordData;
+    } catch (error) {
+      console.error('Toplu kullanıcı kelime veri getirme hatası:', error);
+      return [];
+    }
+  }
+
+  // Set öğrenmeye başlandığında tüm kelimeleri user_words_data'ya ekle
+  async initializeSetWordsForUser(userId, setId) {
+    try {
+      console.log(`🔄 Set ${setId} için kullanıcı ${userId} kelime verileri başlatılıyor...`);
+      
+      // Önce Set ID ile dene, sonra Category ID ile dene
+      console.log(`🔍 Set ID ${setId} için kelimeler getiriliyor...`);
+      let words = await this.getWordsBySetId(setId);
+      console.log(`📊 Set ID ile bulunan kelimeler:`, words?.length || 0);
+      
+      // Eğer Set ID ile kelime bulunamazsa, Category ID olarak dene
+      if (!words || words.length === 0) {
+        console.log(`🔄 Set ID ile kelime bulunamadı, Category ID olarak deneniyor...`);
+        words = await this.getWordsByCategoryId(setId);
+        console.log(`📊 Category ID ile bulunan kelimeler:`, words?.length || 0);
+      }
+      
+      if (!words || words.length === 0) {
+        console.log('⚠️ Bu sette/kategoride kelime bulunamadı');
+        return false;
+      }
+
+      console.log(`📚 ${words.length} kelime user_words_data'ya ekleniyor...`);
+      console.log(`📝 İlk kelime örneği:`, words[0]);
+      
+      // Her kelime için user_words_data kaydı oluştur
+      const wordDataPromises = words.map(async (word, index) => {
+        const wordData = {
+          user_id: userId,
+          set_id: setId,
+          word_id: word.word_id,
+          is_learned: false,
+          attempt_count: 0,
+          correct_count: 0,
+          difficulty_rating: 0,
+          learned_at: null,
+          last_attempt: null
+        };
+        
+        console.log(`📝 Kelime ${index + 1}/${words.length} hazırlanıyor:`, wordData);
+        try {
+          await this.localDB.insertUserWordData(wordData);
+          console.log(`✅ Kelime ${index + 1}/${words.length} local'e eklendi`);
+        } catch (error) {
+          console.error(`❌ Kelime ${index + 1}/${words.length} local'e eklenirken hata:`, error);
+          throw error;
+        }
+      });
+
+      // Local'e ekle
+      console.log(`💾 Local veritabanına ekleniyor...`);
+      await Promise.all(wordDataPromises);
+      console.log(`✅ ${words.length} kelime local veritabanına eklendi`);
+
+      // Supabase'e de ekle (batch insert)
+      try {
+        console.log(`☁️ Supabase'e ekleniyor...`);
+        const supabaseWordData = words.map(word => ({
+          user_id: userId,
+          set_id: setId,
+          word_id: word.word_id,
+          is_learned: false,
+          attempt_count: 0,
+          correct_count: 0,
+          learned_at: null,
+          last_attempt: null,
+          difficulty_rating: 0
+        }));
+
+        console.log(`📤 Supabase'e gönderilecek veri örneği:`, supabaseWordData[0]);
+        await this.supabase.batchInsertUserWordData(supabaseWordData);
+        console.log(`✅ ${words.length} kelime Supabase'e eklendi`);
+      } catch (supabaseError) {
+        console.error('⚠️ Supabase\'e ekleme hatası (local devam ediyor):', supabaseError);
+      }
+
+      console.log(`🎉 Set ${setId} için ${words.length} kelime başarıyla başlatıldı`);
+      return true;
+    } catch (error) {
+      console.error('❌ Set kelime başlatma hatası:', error);
+      throw error;
     }
   }
 }
