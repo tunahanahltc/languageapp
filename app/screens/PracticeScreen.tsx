@@ -1,25 +1,29 @@
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView, Modal, StyleSheet, Dimensions } from "react-native";
+import { View, Text, TouchableOpacity, ScrollView, Modal, StyleSheet, Dimensions, Platform, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons, MaterialIcons, FontAwesome5, AntDesign } from "@expo/vector-icons";
+import { Ionicons, MaterialIcons, FontAwesome5, AntDesign, Feather } from "@expo/vector-icons";
 import { useTheme } from '../contexts/ThemeContext';
 import Background from '../components/shared/Background';
 import { PracticeScreenNavigationProp } from '../types';
+import { BlurView } from "expo-blur"; // Note: Ensure expo-blur is installed, or use a fallback. We'll simulate glass without it for broader compatibility if needed, but opacity works well.
 
 const { width } = Dimensions.get("window");
+
+// --- Interfaces ---
 
 interface PracticeActivity {
   id: string;
   title: string;
   description: string;
   icon: string;
-  iconType: 'Ionicons' | 'MaterialIcons' | 'FontAwesome5' | 'AntDesign';
+  iconType: 'Ionicons' | 'MaterialIcons' | 'FontAwesome5' | 'AntDesign' | 'Feather';
   category: string;
   colors: readonly [string, string, ...string[]];
+  difficulty: 'Easy' | 'Medium' | 'Hard';
 }
 
 interface IconComponentProps {
-  iconType: 'Ionicons' | 'MaterialIcons' | 'FontAwesome5' | 'AntDesign';
+  iconType: PracticeActivity['iconType'];
   name: string;
   size: number;
   color: string;
@@ -29,291 +33,233 @@ interface PracticeScreenProps {
   navigation: PracticeScreenNavigationProp;
 }
 
+// --- Data ---
+
 const practiceActivities: PracticeActivity[] = [
   {
     id: "word-race",
     title: "Kelime Yarışı",
-    description: "Hızlıca çıkan kelimelerin anlamını seç",
-    icon: "flash",
-    iconType: "Ionicons",
+    description: "Zamana karşı yarış! Doğru anlamı en hızlı sen bul.",
+    icon: "zap",
+    iconType: "Feather",
     category: "games",
-    colors: ["#f59e0b", "#ea580c", "#dc2626"] as const,
+    colors: ["#FF9966", "#FF5E62"],
+    difficulty: 'Medium',
   },
   {
     id: "wordle-tr",
     title: "Wordle",
-    description: "5 harfli kelimeyi 6 denemede tahmin et",
-    icon: "brain",
-    iconType: "FontAwesome5",
+    description: "Günün kelimesini 6 denemede bulabilir misin?",
+    icon: "grid",
+    iconType: "Feather",
     category: "games",
-    colors: ["#10b981", "#14b8a6", "#06b6d4"] as const,
+    colors: ["#56CCF2", "#2F80ED"],
+    difficulty: 'Hard',
   },
   {
     id: "hangman",
     title: "Adam Asmaca",
-    description: "Harfleri tahmin ederek kelimeyi bul",
-    icon: "game-controller",
-    iconType: "Ionicons",
+    description: "Klasik kelime tahmin oyunu. Harfleri dikkatli seç!",
+    icon: "life-buoy",
+    iconType: "Feather",
     category: "games",
-    colors: ["#8b5cf6", "#a855f7", "#6366f1"] as const,
+    colors: ["#A770EF", "#CF8BF3", "#FDB99B"],
+    difficulty: 'Easy',
   },
   {
     id: "word-match",
-    title: "Kelime Eşleştirme",
-    description: "Türkçe ve İngilizce kelimeleri eşleştir",
-    icon: "gps-fixed",
-    iconType: "MaterialIcons",
+    title: "Eşleştirme",
+    description: "Kartları çevir, kelimeleri eşleştir, hafızanı test et.",
+    icon: "copy",
+    iconType: "Feather",
     category: "games",
-    colors: ["#3b82f6", "#6366f1", "#8b5cf6"] as const,
+    colors: ["#11998e", "#38ef7d"],
+    difficulty: 'Easy',
   },
   {
     id: "translation",
     title: "Çeviri Testi",
-    description: "Türkçe-İngilizce çeviri yaparak test ol",
-    icon: "shuffle",
-    iconType: "Ionicons",
+    description: "Cümlelerin doğru çevirisini seçenekler arasından bul.",
+    icon: "globe",
+    iconType: "Feather",
     category: "tests",
-    colors: ["#f43f5e", "#ec4899", "#dc2626"] as const,
-  },
-  {
-    id: "comprehensive-test",
-    title: "Kapsamlı Test",
-    description: "Tüm becerilerini test eden karma sorular",
-    icon: "trophy",
-    iconType: "Ionicons",
-    category: "tests",
-    colors: ["#eab308", "#f59e0b", "#ea580c"] as const,
+    colors: ["#ee0979", "#ff6a00"],
+    difficulty: 'Medium',
   },
   {
     id: "listening",
     title: "Dinleme",
-    description: "Kelimenin telaffuzunu dinle ve seç",
-    icon: "volume-high",
-    iconType: "Ionicons",
+    description: "Duyduğun kelimeyi veya cümleyi doğru yaz.",
+    icon: "headphones",
+    iconType: "Feather",
     category: "practice",
-    colors: ["#06b6d4", "#3b82f6", "#6366f1"] as const,
+    colors: ["#FC466B", "#3F5EFB"],
+    difficulty: 'Hard',
   },
   {
     id: "speaking",
     title: "Konuşma",
-    description: "Kelimeleri doğru telaffuz et",
+    description: "Telaffuzunu geliştir. Konuş ve anında geri bildirim al.",
     icon: "mic",
-    iconType: "Ionicons",
+    iconType: "Feather",
     category: "practice",
-    colors: ["#ec4899", "#f43f5e", "#dc2626"] as const,
-  },
-  {
-    id: "sentence-practice",
-    title: "Cümlelerle Öğren",
-    description: "Kelimeleri cümle içinde kullan",
-    icon: "book",
-    iconType: "Ionicons",
-    category: "practice",
-    colors: ["#14b8a6", "#10b981", "#059669"] as const,
+    colors: ["#00b09b", "#96c93d"],
+    difficulty: 'Hard',
   },
 ];
 
-const categoryLabels: Record<string, string> = {
-  games: "Oyunlar",
-  tests: "Testler",
-  practice: "Pratik",
-};
-
-const categoryIcons: Record<string, { name: string; type: 'Ionicons' | 'MaterialIcons' }> = {
-  games: { name: "game-controller", type: "Ionicons" },
-  tests: { name: "trophy", type: "Ionicons" },
-  practice: { name: "gps-fixed", type: "MaterialIcons" },
-};
+const categories = [
+  { id: 'all', label: 'Tümü' },
+  { id: 'games', label: 'Oyunlar' },
+  { id: 'tests', label: 'Testler' },
+  { id: 'practice', label: 'Alıştırma' },
+];
 
 const wordSetLabels: Record<string, string> = {
   all: "Tüm Kelimeler",
   learned: "Öğrendiklerim",
   favorites: "Favorilerim",
   unlearned: "Öğrenmediklerim",
-  set1: "Set 1: Temel Kelimeler",
-  set2: "Set 2: Orta Seviye",
+  set1: "Sıfatlar 101",
+  set2: "Günlük Konuşma",
 };
 
+// --- Components ---
+
 const IconComponent: React.FC<IconComponentProps> = ({ iconType, name, size, color }) => {
-  switch (iconType) {
-    case "Ionicons":
-      return <Ionicons name={name as any} size={size} color={color} />;
-    case "MaterialIcons":
-      return <MaterialIcons name={name as any} size={size} color={color} />;
-    case "FontAwesome5":
-      return <FontAwesome5 name={name} size={size} color={color} />;
-    case "AntDesign":
-      return <AntDesign name={name as any} size={size} color={color} />;
-    default:
-      return <Ionicons name={name as any} size={size} color={color} />;
-  }
+  const IconLib = {
+    Ionicons,
+    MaterialIcons,
+    FontAwesome5,
+    AntDesign,
+    Feather,
+  }[iconType];
+
+  return <IconLib name={name as any} size={size} color={color} />;
 };
+
+// --- Main Screen ---
 
 const PracticeScreen: React.FC<PracticeScreenProps> = ({ navigation }) => {
   const { themeColors } = useTheme();
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showWordSetModal, setShowWordSetModal] = useState<boolean>(false);
   const [selectedActivity, setSelectedActivity] = useState<PracticeActivity | null>(null);
   const [selectedWordSet, setSelectedWordSet] = useState<string>("all");
 
-  const filteredActivities: PracticeActivity[] = selectedCategory
-    ? practiceActivities.filter((activity) => activity.category === selectedCategory)
-    : [];
+  const filteredActivities = selectedCategory === 'all'
+    ? practiceActivities
+    : practiceActivities.filter(a => a.category === selectedCategory);
 
-  const handleCategorySelect = (category: string): void => {
-    setSelectedCategory(category);
-  };
-
-  const handleBackToCategories = (): void => {
-    setSelectedCategory(null);
-  };
-
-  const handleStartPractice = (activity: PracticeActivity): void => {
+  const handleStartPractice = (activity: PracticeActivity) => {
     setSelectedActivity(activity);
     setShowWordSetModal(true);
   };
 
-  const startPracticeWithWordSet = (): void => {
-    console.log(`Starting ${selectedActivity?.title} with ${selectedWordSet}`);
+  const startPracticeWithWordSet = () => {
     setShowWordSetModal(false);
+    if (selectedActivity) {
+      // @ts-ignore
+      navigation.navigate('GameScreen', {
+        gameId: selectedActivity.id,
+        gameTitle: selectedActivity.title,
+        gameType: selectedActivity.category,
+        wordSet: selectedWordSet,
+        themeColors: selectedActivity.colors
+      });
+    }
     setSelectedActivity(null);
-    // Here you would navigate to the actual practice component
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: themeColors[0] }]}>
+    <View style={styles.container}>
       <Background colors={themeColors}>
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <View style={styles.contentContainer}>
+
           {/* Header */}
           <View style={styles.header}>
-            {/* Profile Avatar */}
-            <View style={styles.profileContainer}>
-              <LinearGradient colors={["#3b82f6", "#6d28d9"]} style={styles.avatar}>
-                <Ionicons name="person" size={24} color="white" />
-              </LinearGradient>
+            <View>
+              <Text style={styles.greetingText}>Merhaba, Tunahan 👋</Text>
+              <Text style={styles.subtitleText}>Bugün ne çalışmak istersin?</Text>
             </View>
-
-            {/* Streak Counter */}
-            <LinearGradient colors={["#ea580c", "#dc2626"]} style={styles.streakContainer}>
-              <Ionicons name="flame" size={20} color="white" />
-              <Text style={styles.streakText}>7</Text>
-            </LinearGradient>
-
-            {/* Gems and Hearts */}
-            <View style={styles.statsContainer}>
-              <LinearGradient colors={["#3b82f6", "#06b6d4"]} style={styles.statItem}>
-                <Ionicons name="diamond" size={16} color="white" />
-                <Text style={styles.statText}>250</Text>
+            <TouchableOpacity style={styles.profileButton}>
+              <LinearGradient colors={['#FF9966', '#FF5E62']} style={styles.profileGradient}>
+                <Text style={styles.profileInitials}>TK</Text>
               </LinearGradient>
-              <LinearGradient colors={["#ec4899", "#dc2626"]} style={styles.statItem}>
-                <Ionicons name="heart" size={16} color="white" />
-                <Text style={styles.statText}>5</Text>
-              </LinearGradient>
-            </View>
+            </TouchableOpacity>
           </View>
 
-          {/* Title Section */}
-          {selectedCategory && (
-            <View style={styles.titleSection}>
-              <TouchableOpacity
-                onPress={handleBackToCategories}
-                style={styles.backButton}
-              >
-                <Ionicons name="arrow-back" size={20} color="#374151" />
-              </TouchableOpacity>
-
-              <Text style={styles.title}>
-                {categoryLabels[selectedCategory]}
-              </Text>
-            </View>
-          )}
-
-          {/* Statistics Section */}
-          {!selectedCategory && (
-            <View style={styles.statsSection}>
-              <LinearGradient colors={["#f8fafc", "#e0f2fe"]} style={styles.statsCard}>
-                <View style={styles.statsHeader}>
-                  <LinearGradient colors={["#f59e0b", "#ea580c"]} style={styles.statsIcon}>
-                    <Ionicons name="star" size={24} color="white" />
-                  </LinearGradient>
-                  <Text style={styles.statsTitle}>İstatistiklerim</Text>
-                </View>
-                <View style={styles.statsGrid}>
-                  <View style={[styles.statCard, { backgroundColor: "#E8F5E8" }]}>
-                    <Text style={[styles.statValue, { color: "#22C55E" }]}>156</Text>
-                    <Text style={styles.statLabel}>Öğrenilen</Text>
-                  </View>
-                  <View style={[styles.statCard, { backgroundColor: "#FCE7F3" }]}>
-                    <Text style={[styles.statValue, { color: "#EC4899" }]}>23</Text>
-                    <Text style={styles.statLabel}>Favori</Text>
-                  </View>
-                  <View style={[styles.statCard, { backgroundColor: "#F3E8FF" }]}>
-                    <Text style={[styles.statValue, { color: "#8B5CF6" }]}>12</Text>
-                    <Text style={styles.statLabel}>Oyun</Text>
-                  </View>
-                  <View style={[styles.statCard, { backgroundColor: "#FEF3C7" }]}>
-                    <Text style={[styles.statValue, { color: "#F97316" }]}>%87</Text>
-                    <Text style={styles.statLabel}>Başarı</Text>
-                  </View>
-                </View>
-              </LinearGradient>
-            </View>
-          )}
-
-          {/* Category Buttons */}
-          {!selectedCategory && (
-            <View style={styles.categoriesGrid}>
-              {Object.entries(categoryLabels).map(([value, label]) => (
-                <TouchableOpacity key={value} onPress={() => handleCategorySelect(value)} style={styles.categoryButton}>
-                  <LinearGradient
-                    colors={
-                      value === "games"
-                        ? ["#3b82f6", "#6d28d9"]
-                        : value === "tests"
-                          ? ["#eab308", "#f59e0b"]
-                          : ["#14b8a6", "#059669"]
-                    }
-                    style={styles.categoryIcon}
+          {/* Category Tabs */}
+          <View style={styles.categoriesContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesScroll}>
+              {categories.map((cat) => {
+                const isActive = selectedCategory === cat.id;
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
+                    onPress={() => setSelectedCategory(cat.id)}
+                    style={[
+                      styles.categoryTab,
+                      isActive && styles.categoryTabActive
+                    ]}
                   >
-                    <IconComponent
-                      iconType={categoryIcons[value].type}
-                      name={categoryIcons[value].name}
-                      size={32}
-                      color="white"
-                    />
-                  </LinearGradient>
-                  <Text style={styles.categoryLabel}>{label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
+                    <Text style={[
+                      styles.categoryText,
+                      isActive && styles.categoryTextActive
+                    ]}>
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
 
-          {/* Activity Cards */}
-          {selectedCategory && (
+          {/* Activities Grid */}
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.activitiesScroll}
+          >
             <View style={styles.activitiesGrid}>
               {filteredActivities.map((activity) => (
                 <TouchableOpacity
                   key={activity.id}
                   style={styles.activityCard}
                   onPress={() => handleStartPractice(activity)}
+                  activeOpacity={0.9}
                 >
-                  <View style={styles.activityHeader}>
-                    <LinearGradient colors={activity.colors} style={styles.activityIcon}>
-                      <IconComponent iconType={activity.iconType} name={activity.icon} size={20} color="white" />
-                    </LinearGradient>
-                    <Text style={styles.activityTitle}>{activity.title}</Text>
-                    <Text style={styles.activityDescription}>{activity.description}</Text>
-                  </View>
-                  <LinearGradient colors={activity.colors} style={styles.startButton}>
-                    <Text style={styles.startButtonText}>Başla</Text>
+                  <LinearGradient
+                    colors={['rgba(255,255,255,0.7)', 'rgba(255,255,255,0.4)']}
+                    style={styles.cardGradient}
+                  >
+                    <View style={styles.cardIconContainer}>
+                      <LinearGradient colors={activity.colors} style={styles.iconBackground}>
+                        <IconComponent iconType={activity.iconType} name={activity.icon} size={24} color="white" />
+                      </LinearGradient>
+                      <View style={styles.badgeContainer}>
+                        <Text style={styles.badgeText}>{activity.difficulty}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.cardContent}>
+                      <Text style={styles.cardTitle}>{activity.title}</Text>
+                      <Text style={styles.cardDescription} numberOfLines={2}>{activity.description}</Text>
+                    </View>
+
+                    <View style={styles.playButton}>
+                      <Text style={styles.playButtonText}>Oyna</Text>
+                      <Feather name="arrow-right" size={16} color="#4B5563" />
+                    </View>
                   </LinearGradient>
                 </TouchableOpacity>
               ))}
             </View>
-          )}
-        </ScrollView>
+            <View style={{ height: 100 }} />
+          </ScrollView>
 
-        {/* Word Set Modal */}
+        </View>
+
+        {/* Word Set Modal - Simplified & Modernized */}
         <Modal
           visible={showWordSetModal}
           transparent={true}
@@ -323,63 +269,45 @@ const PracticeScreen: React.FC<PracticeScreenProps> = ({ navigation }) => {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <View style={styles.modalTitleContainer}>
-                  {selectedActivity && (
-                    <LinearGradient colors={selectedActivity.colors} style={styles.modalIcon}>
-                      <IconComponent
-                        iconType={selectedActivity.iconType}
-                        name={selectedActivity.icon}
-                        size={16}
-                        color="white"
-                      />
-                    </LinearGradient>
-                  )}
-                  <Text style={styles.modalTitle}>{selectedActivity?.title}</Text>
-                </View>
-                <TouchableOpacity onPress={() => setShowWordSetModal(false)} style={styles.closeButton}>
-                  <Ionicons name="close" size={20} color="#6b7280" />
+                <Text style={styles.modalTitle}>Set Seçimi</Text>
+                <TouchableOpacity onPress={() => setShowWordSetModal(false)} style={styles.modalClose}>
+                  <Feather name="x" size={24} color="#1F2937" />
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.modalSubtitle}>Hangi kelime grubuyla pratik yapmak istiyorsun?</Text>
+              <Text style={styles.modalDescription}>Bu oyunu hangi kelime grubuyla oynamak istersin?</Text>
 
-              <View style={styles.wordSetOptions}>
+              <ScrollView style={styles.modalOptionsList} showsVerticalScrollIndicator={false}>
                 {Object.entries(wordSetLabels).map(([value, label]) => (
                   <TouchableOpacity
                     key={value}
+                    style={[
+                      styles.modalOption,
+                      selectedWordSet === value && styles.modalOptionSelected
+                    ]}
                     onPress={() => setSelectedWordSet(value)}
-                    style={[styles.wordSetOption, selectedWordSet === value && styles.selectedWordSetOption]}
                   >
-                    {selectedWordSet === value && selectedActivity ? (
-                      <LinearGradient colors={selectedActivity.colors as any} style={styles.selectedOption}>
-                        <Text style={styles.selectedOptionText}>{label}</Text>
-                        {value === "learned" && <Text style={styles.selectedOptionSubtext}>156 kelime</Text>}
-                        {value === "favorites" && <Text style={styles.selectedOptionSubtext}>23 kelime</Text>}
-                        {value === "unlearned" && <Text style={styles.selectedOptionSubtext}>89 kelime</Text>}
-                      </LinearGradient>
-                    ) : (
-                      <View style={styles.unselectedOption}>
-                        <Text style={styles.unselectedOptionText}>{label}</Text>
-                        {value === "learned" && <Text style={styles.unselectedOptionSubtext}>156 kelime</Text>}
-                        {value === "favorites" && <Text style={styles.unselectedOptionSubtext}>23 kelime</Text>}
-                        {value === "unlearned" && <Text style={styles.unselectedOptionSubtext}>89 kelime</Text>}
-                      </View>
+                    <Text style={[
+                      styles.modalOptionText,
+                      selectedWordSet === value && styles.modalOptionTextSelected
+                    ]}>{label}</Text>
+                    {selectedWordSet === value && (
+                      <Feather name="check-circle" size={20} color="#fff" />
                     )}
                   </TouchableOpacity>
                 ))}
-              </View>
+              </ScrollView>
 
-              <TouchableOpacity onPress={startPracticeWithWordSet} style={styles.startPracticeButton}>
-                {selectedActivity && (
-                  <LinearGradient colors={selectedActivity.colors as any} style={styles.startPracticeGradient}>
-                    <Text style={styles.startPracticeText}>Pratiğe Başla</Text>
-                    <Ionicons name="arrow-forward" size={20} color="white" />
-                  </LinearGradient>
-                )}
+              <TouchableOpacity style={styles.modalStartButton} onPress={startPracticeWithWordSet}>
+                <LinearGradient colors={selectedActivity?.colors || ['#3b82f6', '#6d28d9']} style={styles.modalStartGradient}>
+                  <Text style={styles.modalStartText}>Başla</Text>
+                  <Feather name="play" size={20} color="white" />
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           </View>
         </Modal>
+
       </Background>
     </View>
   );
@@ -388,365 +316,242 @@ const PracticeScreen: React.FC<PracticeScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "white",
   },
-  scrollView: {
+  contentContainer: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingTop: 60,
   },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 60,
-    paddingBottom: 32,
-    paddingHorizontal: 4,
-  },
-  profileContainer: {
-    flex: 1,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  streakContainer: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 25,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  streakText: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 16,
-    marginLeft: 8,
-  },
-  statsContainer: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  statItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 25,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  statText: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 14,
-    marginLeft: 6,
-  },
-  titleSection: {
-    alignItems: "center",
-    flexDirection: "row",
-    marginBottom: 32,
-  },
-  backButton: {
-    padding: 12,
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 32,
-    textAlign: "center",
-    alignSelf: "center",
-    fontWeight: "bold",
-    color: "#111827",
-    marginBottom: 12,
-  },
-  statsSection: {
-    marginBottom: 32,
-  },
-  statsCard: {
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  statsHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 24,
   },
-  statsIcon: {
+  greetingText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    textShadowColor: 'rgba(0,0,0,0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  subtitleText: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 4,
+  },
+  profileButton: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  profileGradient: {
     width: 48,
     height: 48,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  statsTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#111827",
-  },
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    justifyContent: "space-between",
-    paddingHorizontal: 12,
-  },
-  statCard: {
-    width: (width - 140) / 2,
-    alignItems: "center",
-    padding: 10,
-    borderRadius: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-    marginBottom: 6,
-  },
-  statValue: {
-    fontSize: 32,
-    fontWeight: "bold",
-    marginBottom: 8,
-  },
-  statLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-  },
-  categoriesGrid: {
-    flexDirection: "row",
-    gap: 20,
-    marginBottom: 32,
-  },
-  categoryButton: {
-    flex: 1,
-    backgroundColor: "white",
     borderRadius: 24,
-    padding: 24,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
   },
-  categoryIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+  profileInitials: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 18,
   },
-  categoryLabel: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#111827",
-    textAlign: "center",
+
+  // Categories
+  categoriesContainer: {
+    marginBottom: 24,
+  },
+  categoriesScroll: {
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  categoryTab: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  categoryTabActive: {
+    backgroundColor: 'white',
+    borderColor: 'white',
+  },
+  categoryText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  categoryTextActive: {
+    color: '#2563EB',
+    fontWeight: 'bold',
+  },
+
+  // Activities
+  activitiesScroll: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
   },
   activitiesGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 20,
-    marginBottom: 32,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 16,
   },
   activityCard: {
-    width: (width - 52) / 2,
-    backgroundColor: "white",
+    width: (width - 56) / 2, // 20 padding left + 20 padding right + 16 gap = 56
     borderRadius: 24,
-    padding: 20,
+    // Overflow visible for shadow if needed, but inner gradient needs radius
+  },
+  cardGradient: {
+    padding: 16,
+    borderRadius: 24,
+    minHeight: 180,
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+  },
+  cardIconContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  iconBackground: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  badgeContainer: {
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#4B5563',
+  },
+  cardContent: {
+    marginBottom: 12,
+  },
+  cardTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  cardDescription: {
+    fontSize: 12,
+    color: '#4B5563',
+    lineHeight: 16,
+  },
+  playButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+  },
+  playButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    padding: 24,
+    minHeight: 400,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  modalClose: {
+    padding: 4,
+  },
+  modalDescription: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginBottom: 24,
+  },
+  modalOptionsList: {
+    maxHeight: 300,
+    marginBottom: 24,
+  },
+  modalOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  modalOptionSelected: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#2563EB',
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  modalOptionTextSelected: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  modalStartButton: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: "#3B82F6",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
   },
-  activityHeader: {
-    alignItems: "center",
-    marginBottom: 16,
+  modalStartGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    gap: 8,
   },
-  activityIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  activityTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#111827",
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  activityDescription: {
-    fontSize: 14,
-    color: "#6b7280",
-    textAlign: "center",
-    lineHeight: 20,
-  },
-  startButton: {
-    borderRadius: 16,
-    paddingVertical: 12,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  startButtonText: {
-    color: "white",
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-  },
-  modalContent: {
-    backgroundColor: "white",
-    borderRadius: 24,
-    padding: 28,
-    width: "100%",
-    maxWidth: 400,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 16,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 28,
-  },
-  modalTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  modalIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#111827",
-  },
-  closeButton: {
-    padding: 10,
-  },
-  modalSubtitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#111827",
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  wordSetOptions: {
-    gap: 12,
-    marginBottom: 28,
-  },
-  wordSetOption: {
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  selectedWordSetOption: {},
-  selectedOption: {
-    padding: 20,
-  },
-  selectedOptionText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "white",
-  },
-  selectedOptionSubtext: {
-    fontSize: 14,
-    color: "rgba(255, 255, 255, 0.8)",
-    marginTop: 4,
-  },
-  unselectedOption: {
-    backgroundColor: "#f9fafb",
-    padding: 20,
-    borderWidth: 2,
-    borderColor: "#e5e7eb",
-  },
-  unselectedOptionText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#111827",
-  },
-  unselectedOptionSubtext: {
-    fontSize: 14,
-    color: "#6b7280",
-    marginTop: 4,
-  },
-  startPracticeButton: {
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  startPracticeGradient: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    gap: 12,
-  },
-  startPracticeText: {
-    color: "white",
-    fontWeight: "600",
-    fontSize: 16,
+  modalStartText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
 

@@ -11,7 +11,10 @@ import PracticeScreen from '../screens/PracticeScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import WordLearnScreen from '../screens/WordLearnScreen';
 import FlashcardScreen from '../screens/FlashcardScreen';
-import { MainTabParamList } from '../types';
+
+import GameScreen from '../screens/GameScreen';
+import { MainTabParamList, PracticeStackParamList } from '../types';
+
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const Stack = createStackNavigator();
@@ -31,7 +34,26 @@ function WordSetsStack() {
   );
 }
 
+
+const PracticeStackNav = createStackNavigator<PracticeStackParamList>();
+
+function PracticeStack() {
+  return (
+    <PracticeStackNav.Navigator
+      screenOptions={{
+        headerShown: false,
+        presentation: 'card',
+        cardStyle: { backgroundColor: 'transparent' }
+      }}
+    >
+      <PracticeStackNav.Screen name="PracticeMain" component={PracticeScreen} />
+      <PracticeStackNav.Screen name="GameScreen" component={GameScreen} />
+    </PracticeStackNav.Navigator>
+  );
+}
+
 export default function TabNavigator() {
+
   const { bottomBarColor } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -101,14 +123,20 @@ export default function TabNavigator() {
       />
       <Tab.Screen
         name="Practice"
-        component={PracticeScreen}
-        options={{
-          tabBarLabel: 'Pratik Yap',
-          tabBarIcon: ({ color, size }) => (
-            <Text style={{ fontSize: size * 0.8, color }}>🎮</Text>
-          ),
+        component={PracticeStack}
+        options={({ route }: { route: RouteProp<MainTabParamList, 'Practice'> }) => {
+          const routeName = getFocusedRouteNameFromRoute(route) ?? 'PracticeMain';
+          const shouldHideTabBar = routeName === 'GameScreen';
+          return {
+            tabBarLabel: 'Pratik Yap',
+            tabBarIcon: ({ color, size }) => (
+              <Text style={{ fontSize: size * 0.8, color }}>🎮</Text>
+            ),
+            tabBarStyle: shouldHideTabBar ? { display: 'none' } : defaultTabBarStyle,
+          };
         }}
       />
+
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}

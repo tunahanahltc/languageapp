@@ -46,28 +46,35 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
   const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
 
   const handleFavoriteToggle = async (word: WordWithMeta): Promise<void> => {
-    try {
-      if (!user?.id || !word) return;
-      const wordId = word.word_id;
-      if (!wordId) return;
+    if (!user?.id || !word?.word_id) return;
+    const wordId = word.word_id;
+    const isRemoving = favoriteIds.has(wordId);
 
-      if (favoriteIds.has(wordId)) {
+    // 1. Optimistic Update (UI'ı hemen boya)
+    setFavoriteIds(prev => {
+      const ns = new Set(prev);
+      if (isRemoving) ns.delete(wordId);
+      else ns.add(wordId);
+      return ns;
+    });
+
+    try {
+      // 2. Arka planda DB'ye yaz
+      if (isRemoving) {
         await HybridDatabaseService.removeFavoriteWord(user.id, wordId);
-        setFavoriteIds(prev => {
-          const ns = new Set(prev);
-          ns.delete(wordId);
-          return ns;
-        });
       } else {
         await HybridDatabaseService.saveFavoriteWord(user.id, wordId);
-        setFavoriteIds(prev => {
-          const ns = new Set(prev);
-          ns.add(wordId);
-          return ns;
-        });
       }
     } catch (e: any) {
-      console.warn('Favori güncellenemedi:', e?.message || e);
+      console.warn('Favori güncellenemedi, geri alınıyor:', e?.message || e);
+
+      // 3. Hata olursa geri al
+      setFavoriteIds(prev => {
+        const ns = new Set(prev);
+        if (isRemoving) ns.add(wordId);
+        else ns.delete(wordId);
+        return ns;
+      });
     }
   };
 
@@ -78,7 +85,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         setLoading(true);
         const data = await HybridDatabaseService.getAllWords();
         console.log('Fetched words:', data);
-        
+
         if (data && data.length > 0) {
           // Gerçek verileri kullan
           const wordsWithMeta: WordWithMeta[] = data.map(word => ({
@@ -95,7 +102,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               gradient: ['#10B981', '#3B82F6'],
             }
           }));
-          
+
           const shuffled = shuffleArray(wordsWithMeta);
           setShuffledWords(shuffled);
         } else {
@@ -196,7 +203,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
               useNativeDriver: true,
             })
           ]).start(() => setIsAnimating(false));
-        });   
+        });
       } else if (event.nativeEvent.translationY > threshold && currentIndex > 0) {
         setIsAnimating(true);
         Animated.parallel([
@@ -306,11 +313,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           </View>
 
           {/* Tema Modal */}
-          <ThemeModal 
+          <ThemeModal
             visible={themeModalVisible}
             onClose={() => setThemeModalVisible(false)}
             currentTheme={currentTheme}
-              onThemeChange={(theme: string) => handleThemeChange(theme)}
+            onThemeChange={(theme: string) => handleThemeChange(theme)}
           />
         </SafeAreaView>
       </Background>

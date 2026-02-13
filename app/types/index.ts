@@ -248,7 +248,20 @@ export type RegisterScreenNavigationProp = any;
 export type HomeScreenNavigationProp = any;
 export type WordSetsPageNavigationProp = any;
 export type ProfileScreenNavigationProp = any;
-export type PracticeScreenNavigationProp = any;
+// Practice Stack Navigation Types
+export type PracticeStackParamList = {
+  PracticeMain: undefined;
+  GameScreen: {
+    gameId: string;
+    gameTitle: string;
+    gameType: string;
+    wordSet: string;
+    themeColors?: readonly string[];
+  };
+};
+
+export type PracticeScreenNavigationProp = any; // We'll fix this properly if we import StackNavigationProp, but 'any' avoids immediate breakages for now.
+
 
 // Route Props
 export type WordLearnScreenRouteProp = RouteProp<MainTabParamList & { WordLearnScreen: WordLearnScreenParams }, 'WordLearnScreen'>;
