@@ -100,6 +100,11 @@ class HybridDatabaseService {
     return this.localDB.getCategoriesBySetId(setId);
   }
 
+  async getRandomWords(limit: number): Promise<WordTranslation[]> {
+    if (!this.isInitialized) await this.checkDatabaseStatus();
+    return this.localDB.getRandomWords(limit);
+  }
+
   // --- Hybrid Operations (Local + Backend) ---
 
   async getUserData(userId: string): Promise<User | null> {

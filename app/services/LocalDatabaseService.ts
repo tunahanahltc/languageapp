@@ -94,6 +94,10 @@ class LocalDatabaseService {
     return WordRepository.getWordsByCategoryId(categoryId);
   }
 
+  async getRandomWords(limit: number): Promise<WordTranslation[]> {
+    return WordRepository.getRandomWords(limit);
+  }
+
   // --- User Operations ---
   async insertUser(userData: User): Promise<void> {
     return UserRepository.insertUser(userData);
@@ -222,12 +226,29 @@ class LocalDatabaseService {
   // --- Maintenance Operations ---
   async clearAllData(): Promise<void> {
     const db = LocalDatabase.getDatabase();
-    db.execSync('DELETE FROM word_translations');
-    db.execSync('DELETE FROM words');
-    db.execSync('DELETE FROM categories');
-    db.execSync('DELETE FROM word_sets');
-    db.execSync('DELETE FROM db_metadata');
-    console.log('🗑️ Veritabanı temizlendi');
+    try {
+      // Tabloları sırayla düşür (Foreign Key kısıtlamalarına dikkat ederek)
+      db.execSync('DROP TABLE IF EXISTS user_words_data');
+      db.execSync('DROP TABLE IF EXISTS user_sets_data');
+      db.execSync('DROP TABLE IF EXISTS user_favorites');
+      db.execSync('DROP TABLE IF EXISTS quiz_results');
+      db.execSync('DROP TABLE IF EXISTS word_translations');
+      db.execSync('DROP TABLE IF EXISTS words');
+      db.execSync('DROP TABLE IF EXISTS categories');
+      db.execSync('DROP TABLE IF EXISTS word_sets');
+      db.execSync('DROP TABLE IF EXISTS users');
+      db.execSync('DROP TABLE IF EXISTS db_metadata');
+
+      console.log('🗑️ Veritabanı tabloları silindi');
+
+      // Veritabanını yeniden başlat
+      const initializer = new DatabaseInitializer(db);
+      initializer.initDatabase();
+      console.log('✅ Veritabanı sıfırdan başlatıldı');
+    } catch (error) {
+      console.error('❌ Veritabanı sıfırlama hatası:', error);
+      throw error;
+    }
   }
 
   async findDuplicateUserWords(): Promise<Array<{ user_id: string; word_id: number; set_id: number; count: number }>> {

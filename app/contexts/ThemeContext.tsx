@@ -48,8 +48,14 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
   // Tema geçerli mi kontrol et
   const isValidTheme = (theme: string): boolean => {
-    const validThemes: ThemeType[] = ['ocean', 'sunset', 'forest', 'lavender', 'midnight', 'rose'];
-    return validThemes.includes(theme as ThemeType);
+    // Tüm geçerli temaların listesi
+    const validThemes: string[] = [
+      'minimal', 'gece',
+      'macera', 'gunbatimi', 'altin',
+      'doga', 'nane', 'okyanus',
+      'kraliyet', 'lavanta', 'seker', 'buz'
+    ];
+    return validThemes.includes(theme);
   };
 
   // Tema değiştir ve kaydet

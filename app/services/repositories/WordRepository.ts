@@ -273,6 +273,24 @@ class WordRepository {
             throw error;
         }
     }
+
+    async getRandomWords(limit: number = 20): Promise<WordTranslation[]> {
+        try {
+            // SQLite RANDOM() fonksiyonu ile rastgele kayıt getir
+            // Language filter kaldırıldı - tüm çeviriler getirilecek
+            const result = await this.db.getAllAsync(
+                `SELECT * FROM word_translations 
+                 ORDER BY RANDOM() 
+                 LIMIT ?`,
+                [limit]
+            );
+            console.log(`🔍 WordRepository: ${result.length} rastgele kelime getirildi`);
+            return result as WordTranslation[];
+        } catch (error) {
+            console.error('❌ Rastgele kelime getirme hatası:', error);
+            throw error;
+        }
+    }
 }
 
 export default new WordRepository();

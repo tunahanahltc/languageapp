@@ -33,7 +33,7 @@ export function getEnglishConfig(): LanguageConfig {
   return {
     language: 'en-US',
     pitch: 1.0,
-    rate: 0.8,
+    rate: 1.0,
     volume: 1.0,
   };
 }
@@ -42,7 +42,7 @@ export function getTurkishConfig(): LanguageConfig {
   return {
     language: 'tr-TR',
     pitch: 1.0,
-    rate: 0.8,
+    rate: 1.0,
     volume: 1.0,
   };
 }
@@ -51,7 +51,7 @@ export function getSpecialCase(key: string): SpecialCaseConfig {
   switch (key) {
     case 'exampleSentence':
       return {
-        rate: 0.75,
+        rate: 0.9,
       };
     default:
       return {};

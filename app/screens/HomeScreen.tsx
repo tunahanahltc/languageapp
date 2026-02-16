@@ -78,74 +78,56 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     }
   };
 
-  // Fetch words from Supabase
-  useEffect(() => {
-    const fetchWords = async (): Promise<void> => {
-      try {
-        setLoading(true);
-        const data = await HybridDatabaseService.getAllWords();
-        console.log('Fetched words:', data);
+  // Fetch random words
+  const fetchRandomWords = async (isInitial: boolean = false): Promise<void> => {
+    try {
+      if (isInitial) setLoading(true);
 
-        if (data && data.length > 0) {
-          // Gerçek verileri kullan
-          const wordsWithMeta: WordWithMeta[] = data.map(word => ({
-            ...word,
-            word_id: word.word_id,
-            word_text: word.word_text,
-            word_meaning: word.meaning,
-            meaning: word.meaning,
-            example_sentence: word.example_sentence ?? undefined,
-            setInfo: {
-              icon: '📚',
-              title: 'Kelime Seti',
-              difficulty: 'Kolay',
-              gradient: ['#10B981', '#3B82F6'],
-            }
-          }));
+      const newWords = await HybridDatabaseService.getRandomWords(10);
+      console.log(`Fetched ${newWords.length} random words`);
 
-          const shuffled = shuffleArray(wordsWithMeta);
-          setShuffledWords(shuffled);
-        } else {
-          setShuffledWords([]);
-        }
-      } catch (error) {
-        console.error('Error fetching words:', error);
+      if (newWords && newWords.length > 0) {
+        const wordsWithMeta: WordWithMeta[] = newWords.map(word => ({
+          ...word,
+          word_id: word.word_id,
+          word_text: word.word_text,
+          word_meaning: word.meaning,
+          meaning: word.meaning,
+          example_sentence: word.example_sentence ?? undefined,
+          setInfo: {
+            icon: '📚',
+            title: 'Rastgele Kelime',
+            difficulty: 'Karışık',
+            gradient: ['#10B981', '#3B82F6'],
+          }
+        }));
+
+        setShuffledWords(prev => isInitial ? wordsWithMeta : [...prev, ...wordsWithMeta]);
+      } else if (isInitial) {
         setShuffledWords([]);
-      } finally {
-        setLoading(false);
       }
-    };
-
-    fetchWords();
-  }, []);
-
-  // Favorileri yükle
-  useEffect(() => {
-    const loadFavorites = async (): Promise<void> => {
-      if (!user?.id) return;
-      try {
-        // Sadece local'den oku (giriş yapılmışsa zaten güncel)
-        const favorites = await HybridDatabaseService.getFavoriteWordsLocalOnly(user.id);
-        const ids = new Set((favorites || []).map((f: any) =>
-          f.word_id ?? f.wordId ?? f.word?.word_id
-        ));
-        setFavoriteIds(ids);
-      } catch (e: any) {
-        console.warn('Favoriler yüklenemedi:', e?.message || e);
-      }
-    };
-    loadFavorites();
-  }, [user?.id]);
-
-  // 1. Kelimeleri karıştır
-  function shuffleArray<T>(array: T[]): T[] {
-    const arr = [...array];
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
+    } catch (error) {
+      console.error('Error fetching random words:', error);
+      if (isInitial) setShuffledWords([]);
+    } finally {
+      if (isInitial) setLoading(false);
     }
-    return arr;
-  }
+  };
+
+  // Initial load & Sync listener
+  const { syncCounter } = useAuth(); // AuthContext'ten syncCounter'ı al
+
+  useEffect(() => {
+    fetchRandomWords(true);
+  }, [syncCounter]); // Sync tamamlanınca (counter değişince) kelimeleri yeniden çek
+
+  // Load more when reaching end
+  useEffect(() => {
+    if (shuffledWords.length > 0 && currentIndex >= shuffledWords.length - 3) {
+      console.log('Loading more random words...');
+      fetchRandomWords(false);
+    }
+  }, [currentIndex, shuffledWords.length]);
 
   const displayedWord = shuffledWords[currentIndex];
 
@@ -292,10 +274,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     <View style={[styles.container, { backgroundColor: colorProps.background }]}>
       <Background colors={themeColors}>
         <SafeAreaView style={styles.safeArea}>
-          {/* Sağ üst köşede tema butonu */}
-          <View style={styles.themeButtonContainer}>
-            <ThemeButton onPress={() => setThemeModalVisible(true)} />
-          </View>
 
           {/* Ana içerik - kart */}
           <View style={styles.centerContent}>
@@ -312,13 +290,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             />
           </View>
 
-          {/* Tema Modal */}
-          <ThemeModal
-            visible={themeModalVisible}
-            onClose={() => setThemeModalVisible(false)}
-            currentTheme={currentTheme}
-            onThemeChange={(theme: string) => handleThemeChange(theme)}
-          />
         </SafeAreaView>
       </Background>
     </View>
@@ -342,13 +313,6 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: 'transparent',
     paddingHorizontal: 20,
-  },
-  themeButtonContainer: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    zIndex: 10,
-    padding: 16,
   },
   loadingContainer: {
     flex: 1,

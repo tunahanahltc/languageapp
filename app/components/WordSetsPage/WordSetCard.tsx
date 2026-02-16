@@ -1,7 +1,10 @@
 import React, { useState, useEffect, memo } from 'react';
 import { TouchableOpacity, View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Feather, Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
+// Adjusted width calculation for better spacing
 const cardWidth = (width - 48) / 2;
 
 interface WordSet {
@@ -26,359 +29,253 @@ interface WordSetCardProps {
 
 interface DifficultyConfig {
   name: string;
-  color: string;
-  bgColor: string;
+  colors: readonly [string, string, ...string[]];
+  icon: string;
 }
 
 const WordSetCard: React.FC<WordSetCardProps> = memo(({ wordSet, onPress, index = 0 }) => {
-  const [wordCount, setWordCount] = useState(0);
   const [scaleValue] = useState(new Animated.Value(1));
   const [fadeValue] = useState(new Animated.Value(0));
-  const [rotateValue] = useState(new Animated.Value(0));
-  const [elevationValue] = useState(new Animated.Value(1));
 
   useEffect(() => {
     Animated.timing(fadeValue, {
       toValue: 1,
-      duration: 300,
-      delay: index * 100,
+      duration: 400,
+      delay: index * 100, // Staggered animation
       useNativeDriver: true,
     }).start();
-
-    if (wordSet.total !== undefined) {
-      setWordCount(wordSet.total);
-    } else {
-      setWordCount(0);
-    }
-  }, [wordSet.total, index, fadeValue]);
+  }, [index, fadeValue]);
 
   const handlePressIn = () => {
-    Animated.parallel([
-      Animated.spring(scaleValue, {
-        toValue: 0.96,
-        useNativeDriver: true,
-      }),
-      Animated.timing(rotateValue, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(elevationValue, {
-        toValue: 1.1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    Animated.spring(scaleValue, {
+      toValue: 0.95,
+      useNativeDriver: true,
+    }).start();
   };
 
   const handlePressOut = () => {
-    Animated.parallel([
-      Animated.spring(scaleValue, {
-        toValue: 1,
-        useNativeDriver: true,
-      }),
-      Animated.timing(rotateValue, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(elevationValue, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    Animated.spring(scaleValue, {
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
   };
-
-  const handlePress = () => {
-    console.log('WordSetCard pressed:', wordSet?.name);
-    if (onPress) {
-      onPress();
-    }
-  };
-
-  if (!wordSet) {
-    return null;
-  }
 
   const getDifficultyConfig = (difficulty?: string): DifficultyConfig => {
     const configs: Record<string, DifficultyConfig> = {
-      'A1': { name: 'Başlangıç', color: '#10B981', bgColor: 'rgba(16, 185, 129, 0.1)' },
-      'A2': { name: 'Temel', color: '#3B82F6', bgColor: 'rgba(59, 130, 246, 0.1)' },
-      'B1': { name: 'Orta', color: '#F59E0B', bgColor: 'rgba(245, 158, 11, 0.1)' },
-      'B2': { name: 'Orta-İleri', color: '#EF4444', bgColor: 'rgba(239, 68, 68, 0.1)' },
-      'C1': { name: 'İleri', color: '#8B5CF6', bgColor: 'rgba(139, 92, 246, 0.1)' },
-      'C2': { name: 'Profesyonel', color: '#EC4899', bgColor: 'rgba(236, 72, 153, 0.1)' }
+      'A1': { name: 'Başlangıç', colors: ['#10B981', '#34D399'], icon: 'feather' },
+      'A2': { name: 'Temel', colors: ['#3B82F6', '#60A5FA'], icon: 'droplet' },
+      'B1': { name: 'Orta', colors: ['#F59E0B', '#FBBF24'], icon: 'trending-up' },
+      'B2': { name: 'Orta-İleri', colors: ['#EF4444', '#F87171'], icon: 'activity' },
+      'C1': { name: 'İleri', colors: ['#8B5CF6', '#A78BFA'], icon: 'zap' },
+      'C2': { name: 'Uzman', colors: ['#EC4899', '#F472B6'], icon: 'award' }
     };
-    return configs[difficulty || ''] || { name: 'Genel', color: '#6B7280', bgColor: 'rgba(107, 114, 128, 0.1)' };
+    return configs[difficulty || ''] || { name: 'Genel', colors: ['#6B7280', '#9CA3AF'], icon: 'book' };
   };
 
   const setName = wordSet.name || 'Kelime Seti';
-  const firstChar = setName.charAt(0).toUpperCase() || 'K';
-  const difficultyConfig = getDifficultyConfig(wordSet.category);
+  const difficultyConfig = getDifficultyConfig(wordSet.category || wordSet.difficulty);
   const progress = wordSet.progress || 0;
+  const isCompleted = progress === 100;
 
   return (
     <Animated.View
       style={[
+        styles.container,
         {
-          transform: [
-            { scale: scaleValue },
-            {
-              rotate: rotateValue.interpolate({
-                inputRange: [0, 1],
-                outputRange: ['0deg', '0.5deg']
-              })
-            }
-          ],
+          transform: [{ scale: scaleValue }],
           opacity: fadeValue,
-          shadowOpacity: elevationValue.interpolate({
-            inputRange: [1, 1.1],
-            outputRange: [0.12, 0.24]
-          })
         }
       ]}
     >
       <TouchableOpacity
-        style={styles.card}
-        activeOpacity={1}
-        onPress={handlePress}
+        activeOpacity={0.9}
+        onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        style={styles.touchable}
       >
-        <View style={styles.glassBackground} />
+        <LinearGradient
+          colors={['rgba(255, 255, 255, 0.85)', 'rgba(255, 255, 255, 0.5)']}
+          style={styles.cardGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          {/* Header Icon Section */}
+          <View style={styles.header}>
+            <LinearGradient
+              colors={difficultyConfig.colors}
+              style={styles.iconContainer}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Feather name={difficultyConfig.icon as any} size={20} color="white" />
+            </LinearGradient>
 
-        <View style={styles.cardContent}>
-          <View style={[styles.iconContainer, { backgroundColor: wordSet.color || difficultyConfig.color }]}>
-            <View style={styles.iconInner}>
-              <Text style={styles.iconText}>{firstChar}</Text>
-            </View>
-            <View style={[styles.iconGlow, { backgroundColor: wordSet.color || difficultyConfig.color }]} />
-          </View>
-
-          <View style={styles.textContainer}>
-            <Text style={styles.setName} numberOfLines={2}>{setName}</Text>
-            <Text style={styles.setSubtitle}>Kelime seti</Text>
-          </View>
-
-          <View style={styles.bottomSection}>
-            <View style={[styles.difficultyBadge, { backgroundColor: difficultyConfig.bgColor }]}>
-              <View style={[styles.difficultyDot, { backgroundColor: difficultyConfig.color }]} />
-              <Text style={[styles.difficultyText, { color: difficultyConfig.color }]}>
-                {difficultyConfig.name}
-              </Text>
-            </View>
-
-            {wordSet.hasData ? (
-              <View style={styles.progressSection}>
-                <View style={styles.progressHeader}>
-                  <View style={styles.starContainer}>
-                    <Text style={styles.starEmoji}>⭐</Text>
-                  </View>
-                  <Text style={styles.progressText}>{progress}%</Text>
-                </View>
-
-                {wordSet.learned_count !== undefined && wordSet.total !== undefined && (
-                  <Text style={styles.progressDetails}>
-                    {wordSet.learned_count}/{wordSet.total} kelime
-                  </Text>
-                )}
-
-                <View style={styles.progressBarContainer}>
-                  <View style={styles.progressBarBg}>
-                    <Animated.View
-                      style={[
-                        styles.progressBarFill,
-                        {
-                          backgroundColor: wordSet.color || difficultyConfig.color,
-                          width: `${progress}%`
-                        }
-                      ]}
-                    />
-                  </View>
-                </View>
+            {isCompleted ? (
+              <View style={styles.completedBadge}>
+                <Ionicons name="checkmark-circle" size={16} color="#10B981" />
               </View>
             ) : (
-              <View style={styles.notStartedSection}>
-                <View style={[styles.startBadge, { borderColor: wordSet.color || difficultyConfig.color }]}>
-                  <Text style={[styles.startText, { color: wordSet.color || difficultyConfig.color }]}>Keşfetmeye Başla →</Text>
-                </View>
+              <View style={styles.difficultyBadge}>
+                <Text style={[styles.difficultyText, { color: difficultyConfig.colors[0] }]}>
+                  {difficultyConfig.name}
+                </Text>
               </View>
             )}
           </View>
-        </View>
+
+          {/* Title Section */}
+          <View style={styles.content}>
+            <Text style={styles.title} numberOfLines={2}>{setName}</Text>
+            <Text style={styles.subtitle}>
+              {wordSet.total ? `${wordSet.total} Kelime` : 'Detaylar'}
+            </Text>
+          </View>
+
+          {/* Progress Section */}
+          <View style={styles.footer}>
+            {wordSet.hasData ? (
+              <View style={styles.progressContainer}>
+                <View style={styles.progressLabelRow}>
+                  <Text style={styles.progressPercent}>{Math.round(progress)}%</Text>
+                  <Text style={styles.progressLabel}>Öğrenildi</Text>
+                </View>
+                <View style={styles.progressBarBg}>
+                  <LinearGradient
+                    colors={difficultyConfig.colors}
+                    style={[styles.progressBarFill, { width: `${progress}%` }]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  />
+                </View>
+              </View>
+            ) : (
+              <View style={styles.startAction}>
+                <Text style={[styles.startText, { color: difficultyConfig.colors[0] }]}>Başla</Text>
+                <Feather name="arrow-right" size={16} color={difficultyConfig.colors[0]} />
+              </View>
+            )}
+          </View>
+
+        </LinearGradient>
       </TouchableOpacity>
     </Animated.View>
   );
 });
 
 const styles = StyleSheet.create({
-  card: {
+  container: {
     width: cardWidth,
-    height: 200,
+    height: 190, // Slightly taller for better spacing
     marginBottom: 16,
     marginHorizontal: 8,
-    borderRadius: 20,
-    overflow: 'hidden',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
+    borderRadius: 24,
   },
-  glassBackground: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+  touchable: {
+    flex: 1,
+    borderRadius: 24,
   },
-  cardContent: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  cardGradient: {
+    flex: 1,
+    borderRadius: 24,
     padding: 16,
-    height: '100%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    justifyContent: 'space-between',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    position: 'relative',
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  iconInner: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-  },
-  iconGlow: {
-    position: 'absolute',
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    opacity: 0.3,
-    transform: [{ scale: 1.1 }],
-  },
-  iconText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 18,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  textContainer: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  setName: {
-    fontWeight: '700',
-    color: '#1F2937',
-    fontSize: 14,
-    marginBottom: 4,
-    letterSpacing: -0.3,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  setSubtitle: {
-    color: '#6B7280',
-    fontSize: 11,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  bottomSection: {
-    width: '100%',
-    alignItems: 'center',
+    shadowColor: '#000000ff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   difficultyBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.6)',
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    marginBottom: 8,
-  },
-  difficultyDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    marginRight: 5,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.8)',
   },
   difficultyText: {
     fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 0.3,
+    fontWeight: '700',
   },
-  progressSection: {
-    alignItems: 'center',
-    width: '100%',
+  completedBadge: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 4,
   },
-  progressHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  starContainer: {
-    width: 16,
-    height: 16,
-    alignItems: 'center',
+  content: {
+    flex: 1,
     justifyContent: 'center',
   },
-  starEmoji: {
-    fontSize: 12,
-  },
-  progressText: {
-    marginLeft: 4,
-    color: '#F59E0B',
-    fontWeight: '700',
-    fontSize: 11,
-    letterSpacing: -0.3,
-  },
-  progressDetails: {
-    color: '#6B7280',
-    fontSize: 9,
-    fontWeight: '500',
+  title: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1F2937',
     marginBottom: 4,
-    textAlign: 'center',
+    lineHeight: 22,
   },
-  progressBarContainer: {
-    alignItems: 'center',
+  subtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  footer: {
+    marginTop: 12,
+  },
+  progressContainer: {
     width: '100%',
+  },
+  progressLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+    alignItems: 'flex-end',
+  },
+  progressPercent: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#374151',
+  },
+  progressLabel: {
+    fontSize: 10,
+    color: '#9CA3AF',
   },
   progressBarBg: {
-    width: '100%',
     height: 6,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 4,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
     overflow: 'hidden',
   },
   progressBarFill: {
-    height: 6,
-    borderRadius: 4,
-    minWidth: 6,
+    height: '100%',
+    borderRadius: 3,
   },
-  notStartedSection: {
-    width: '100%',
+  startAction: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     paddingTop: 8,
-  },
-  startBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    backgroundColor: 'rgba(255,255,255,0.5)',
+    gap: 4,
   },
   startText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
+    fontSize: 13,
+    fontWeight: '600',
+  }
 });
 
 export default WordSetCard;
