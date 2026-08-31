@@ -22,3 +22,4 @@ Daha ayrıntılı kurulum ve mimari açıklamaları için proje kökündeki READ
 
 ---
 _İsterseniz bu README'e proje ekran görüntülerini ekleyip, README'nin üst kısmına CI/badge entegrasyonlarıyla güncelleme yapabilirim._
+\n## Screenshots\n\n![App screenshot](assets/screenshots/screenshot-1.png)\n\nScreenshot: main app screens (placeholder). Replace with higher-resolution images if available.\n
